@@ -1,0 +1,847 @@
+.fault-distribution-page {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  color: #eaf5fc;
+  font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', Arial, sans-serif;
+  font-synthesis: none;
+  background: #081d31;
+  border: 1px solid rgba(66, 155, 214, 0.22);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 70px rgba(0, 25, 54, 0.28),
+    0 10px 40px rgba(0, 0, 0, 0.1);
+}
+
+.fault-distribution-map-shell,
+.fault-distribution-map {
+  position: absolute;
+  inset: 0;
+}
+
+.fault-distribution-map-shell {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(0, 137, 197, 0.12), transparent 34%),
+    #071a2d;
+}
+
+.fault-distribution-map-shell::after {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(90deg, rgba(3, 15, 28, 0.28), transparent 22%, transparent 78%, rgba(3, 15, 28, 0.18)),
+    linear-gradient(180deg, rgba(3, 15, 28, 0.1), transparent 22%, transparent 82%, rgba(3, 15, 28, 0.18));
+}
+
+.fault-distribution-map {
+  z-index: 1;
+}
+
+.fault-distribution-map .amap-container {
+  background: #071a2d !important;
+}
+
+.fault-distribution-map .amap-copyright,
+.fault-distribution-map .amap-logo {
+  z-index: 7 !important;
+  opacity: 0.58;
+}
+
+.fault-distribution-live-state {
+  position: absolute;
+  top: 16px;
+  left: 294px;
+  z-index: 8;
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 10px;
+  color: #6be1a6;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(8, 31, 48, 0.92);
+  border: 1px solid rgba(49, 211, 129, 0.2);
+  border-radius: 5px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(10px);
+  gap: 7px;
+}
+
+.fault-distribution-live-state i {
+  width: 6px;
+  height: 6px;
+  background: #31d381;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(49, 211, 129, 0.88);
+  animation: fault-live-pulse 2s ease-in-out infinite;
+}
+
+.fault-line-panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 9;
+  width: 264px;
+  overflow: hidden;
+  background: rgba(8, 27, 48, 0.95);
+  border: 1px solid rgba(73, 164, 216, 0.3);
+  border-radius: 7px;
+  box-shadow: 0 15px 36px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.fault-line-panel > header {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 13px;
+  border-bottom: 1px solid rgba(73, 164, 216, 0.14);
+  gap: 10px;
+}
+
+.fault-line-panel > header div {
+  min-width: 0;
+}
+
+.fault-line-panel > header strong,
+.fault-line-panel > header span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fault-line-panel > header strong {
+  color: #f0f8fd;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.fault-line-panel > header span {
+  margin-top: 3px;
+  color: #8ba5b7;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fault-line-panel > header > span {
+  margin-top: 0;
+  color: #32d8f5;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+
+.fault-line-list {
+  padding: 5px;
+}
+
+.fault-line-item {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  align-items: center;
+  padding: 8px 9px;
+  color: #bed0dc;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 9px;
+  transition:
+    color 0.18s,
+    background 0.18s,
+    box-shadow 0.18s;
+}
+
+.fault-line-item:hover,
+.fault-line-item.is-active {
+  color: #f4fbff;
+  background: rgba(0, 229, 255, 0.07);
+}
+
+.fault-line-item.is-active {
+  box-shadow: inset 2px 0 #00e5ff;
+}
+
+.fault-line-item > i {
+  width: 7px;
+  height: 7px;
+  background: #31d381;
+  border-radius: 50%;
+  box-shadow: 0 0 7px rgba(49, 211, 129, 0.72);
+}
+
+.fault-line-item > i.is-warning {
+  background: #f5a623;
+  box-shadow: 0 0 7px rgba(245, 166, 35, 0.76);
+}
+
+.fault-line-item > i.is-fault {
+  background: #ff5268;
+  box-shadow: 0 0 7px rgba(255, 82, 104, 0.82);
+}
+
+.fault-line-copy {
+  min-width: 0;
+}
+
+.fault-line-copy strong,
+.fault-line-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fault-line-copy strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fault-line-copy small {
+  margin-top: 4px;
+  color: #809bad;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fault-line-status {
+  color: #4ddb92;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fault-line-status.is-warning {
+  color: #f5b43a;
+}
+
+.fault-line-status.is-fault {
+  color: #ff6376;
+}
+
+.fault-map-tools {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 9;
+  display: flex;
+  overflow: hidden;
+  background: rgba(8, 27, 48, 0.94);
+  border: 1px solid rgba(73, 164, 216, 0.28);
+  border-radius: 6px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(12px);
+}
+
+.fault-map-tools button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  place-items: center;
+  color: #a8bdcb;
+  font-size: 20px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid rgba(73, 164, 216, 0.14);
+  transition:
+    color 0.18s,
+    background 0.18s;
+}
+
+.fault-map-tools button:last-child {
+  border-right: 0;
+}
+
+.fault-map-tools button:hover {
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.09);
+}
+
+.fault-map-tools svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.fault-map-device-marker {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  color: #dcfaff;
+  cursor: pointer;
+  background: #08263f;
+  border: 2px solid #2fdef8;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 4px rgba(47, 222, 248, 0.08),
+    0 0 12px rgba(47, 222, 248, 0.64);
+}
+
+.fault-map-device-marker::before {
+  position: absolute;
+  inset: -6px;
+  content: '';
+  border: 1px solid rgba(47, 222, 248, 0.56);
+  border-radius: 50%;
+  animation: fault-device-pulse 2.6s ease-out infinite;
+}
+
+.fault-map-device-marker > i {
+  width: 6px;
+  height: 6px;
+  background: #dffbff;
+  border-radius: 50%;
+}
+
+.fault-map-device-marker > span {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  padding: 2px 5px;
+  color: #e5f6ff;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(5, 25, 43, 0.84);
+  border-radius: 3px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000000;
+}
+
+.fault-map-device-marker.is-warning {
+  border-color: #f5a623;
+  box-shadow:
+    0 0 0 4px rgba(245, 166, 35, 0.08),
+    0 0 12px rgba(245, 166, 35, 0.7);
+}
+
+.fault-map-device-marker.is-warning::before {
+  border-color: rgba(245, 166, 35, 0.6);
+}
+
+.fault-map-device-marker.is-warning > i {
+  background: #ffe3a4;
+}
+
+.fault-map-device-marker.is-offline {
+  border-color: #718797;
+  box-shadow: 0 0 0 4px rgba(113, 135, 151, 0.08);
+}
+
+.fault-map-device-marker.is-offline::before {
+  display: none;
+}
+
+.fault-map-device-marker.is-offline > i {
+  background: #718797;
+}
+
+.fault-map-fault-marker {
+  position: relative;
+  display: flex;
+  min-width: 184px;
+  min-height: 48px;
+  align-items: center;
+  padding: 7px 10px 7px 38px;
+  color: #fff1f3;
+  text-align: left;
+  cursor: pointer;
+  background: rgba(39, 20, 32, 0.95);
+  border: 1px solid rgba(255, 82, 104, 0.68);
+  border-radius: 6px;
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.26),
+    0 0 18px rgba(255, 82, 104, 0.12);
+}
+
+.fault-map-fault-marker > i {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  width: 12px;
+  height: 12px;
+  background: #ff5268;
+  border: 2px solid #ffe4e8;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(255, 82, 104, 0.92);
+  transform: translateY(-50%);
+}
+
+.fault-map-fault-marker > i::before,
+.fault-map-fault-marker > i::after {
+  position: absolute;
+  inset: -8px;
+  content: '';
+  border: 1px solid rgba(255, 82, 104, 0.7);
+  border-radius: 50%;
+  animation: fault-point-pulse 1.9s ease-out infinite;
+}
+
+.fault-map-fault-marker > i::after {
+  animation-delay: 0.8s;
+}
+
+.fault-map-fault-marker > span,
+.fault-map-fault-marker strong,
+.fault-map-fault-marker small {
+  display: block;
+}
+
+.fault-map-fault-marker strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fault-map-fault-marker small {
+  margin-top: 3px;
+  color: #c798a3;
+  font-size: 12px;
+}
+
+.fault-map-loading,
+.fault-map-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  color: #aec4d3;
+  background: rgba(7, 25, 44, 0.94);
+  border: 1px solid rgba(73, 164, 216, 0.28);
+  border-radius: 7px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+}
+
+.fault-map-loading {
+  padding: 14px 18px;
+  gap: 11px;
+}
+
+.fault-map-loading span {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(0, 229, 255, 0.2);
+  border-top-color: #00e5ff;
+  border-radius: 50%;
+  animation: fault-map-spin 0.8s linear infinite;
+}
+
+.fault-map-loading strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fault-map-error {
+  max-width: 360px;
+  padding: 15px 18px;
+  border-color: rgba(239, 68, 68, 0.35);
+  gap: 12px;
+}
+
+.fault-map-error svg {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  fill: none;
+  color: #ff6376;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.fault-map-error strong,
+.fault-map-error span {
+  display: block;
+}
+
+.fault-map-error strong {
+  color: #ffe9ec;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fault-map-error span {
+  margin-top: 4px;
+  color: #bd9aa1;
+  font-size: 12px;
+}
+
+.fault-map-detail {
+  position: absolute;
+  top: 70px;
+  right: 16px;
+  z-index: 10;
+  width: 316px;
+  overflow: hidden;
+  background: rgba(8, 27, 48, 0.97);
+  border: 1px solid rgba(73, 164, 216, 0.34);
+  border-radius: 7px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.fault-map-detail > header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 9px 8px 13px;
+  border-bottom: 1px solid rgba(73, 164, 216, 0.14);
+  gap: 10px;
+}
+
+.fault-map-detail > header div {
+  min-width: 0;
+}
+
+.fault-map-detail > header strong,
+.fault-map-detail > header span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fault-map-detail > header strong {
+  color: #f1f9fe;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.fault-map-detail > header span {
+  margin-top: 3px;
+  color: #829db0;
+  font-size: 12px;
+}
+
+.fault-map-detail > header button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  color: #8ca5b7;
+  font-size: 21px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+}
+
+.fault-map-detail > header button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fault-map-detail-body {
+  padding: 13px;
+}
+
+.fault-detail-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fault-detail-title > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.fault-detail-title i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  background: #31d381;
+  border-radius: 50%;
+  box-shadow: 0 0 7px rgba(49, 211, 129, 0.75);
+}
+
+.fault-detail-title i.is-fault,
+.fault-detail-title i.is-warning {
+  background: #ff5268;
+  box-shadow: 0 0 7px rgba(255, 82, 104, 0.78);
+}
+
+.fault-detail-title i.is-offline {
+  background: #718797;
+  box-shadow: none;
+}
+
+.fault-detail-title strong {
+  overflow: hidden;
+  color: #f2f9fe;
+  font-size: 15px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fault-detail-title > span {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  color: #ff7182;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 82, 104, 0.1);
+  border-radius: 4px;
+}
+
+.fault-detail-title > span.is-online {
+  color: #59dd9b;
+  background: rgba(49, 211, 129, 0.1);
+}
+
+.fault-detail-title > span.is-warning {
+  color: #f5b43a;
+  background: rgba(245, 166, 35, 0.1);
+}
+
+.fault-detail-title > span.is-offline {
+  color: #93a7b5;
+  background: rgba(113, 135, 151, 0.1);
+}
+
+.fault-map-detail-body > p {
+  margin: 10px 0 13px;
+  color: #91a9ba;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+.fault-map-detail-body dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  gap: 13px 14px;
+}
+
+.fault-map-detail-body dt,
+.fault-map-detail-body dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fault-map-detail-body dt {
+  color: #7893a6;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fault-map-detail-body dd {
+  margin-top: 4px;
+  color: #e0edf5;
+  font-family: Consolas, 'Microsoft YaHei UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fault-map-detail-body dd.is-danger {
+  color: #ff7182;
+}
+
+.fault-detail-primary {
+  min-height: 36px;
+  margin-top: 15px;
+  padding: 0 14px;
+  color: #061426;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #16d7ff;
+  border: 1px solid #16d7ff;
+  border-radius: 5px;
+}
+
+.fault-detail-primary:hover {
+  background: #5be6ff;
+}
+
+.fault-distribution-legend {
+  position: absolute;
+  right: 16px;
+  bottom: 15px;
+  left: 16px;
+  z-index: 9;
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 13px;
+  color: #819dad;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(7, 24, 43, 0.91);
+  border: 1px solid rgba(73, 164, 216, 0.22);
+  border-radius: 6px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(12px);
+  gap: 14px;
+}
+
+.fault-distribution-legend > div {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fault-distribution-legend span {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 6px;
+}
+
+.fault-distribution-legend i {
+  width: 7px;
+  height: 7px;
+  background: #31d381;
+  border-radius: 50%;
+}
+
+.fault-distribution-legend i.is-warning {
+  background: #f5a623;
+}
+
+.fault-distribution-legend i.is-offline {
+  background: #718797;
+}
+
+.fault-distribution-legend i.is-fault {
+  background: #ff5268;
+  box-shadow: 0 0 7px rgba(255, 82, 104, 0.78);
+}
+
+.fault-detail-enter-active,
+.fault-detail-leave-active {
+  transition:
+    opacity 0.24s,
+    transform 0.24s;
+}
+
+.fault-detail-enter-from,
+.fault-detail-leave-to {
+  opacity: 0;
+  transform: translateX(24px);
+}
+
+@keyframes fault-device-pulse {
+  0% {
+    opacity: 0.72;
+    transform: scale(0.55);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+
+@keyframes fault-point-pulse {
+  0% {
+    opacity: 0.86;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+@keyframes fault-live-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes fault-map-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1280px) {
+  .fault-line-panel {
+    width: 244px;
+  }
+
+  .fault-distribution-live-state {
+    left: 274px;
+  }
+
+  .fault-map-detail {
+    width: 292px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .fault-distribution-live-state {
+    display: none;
+  }
+
+  .fault-distribution-legend > div {
+    gap: 10px;
+  }
+}
+
+@media (max-height: 790px) {
+  .fault-line-item {
+    min-height: 55px;
+  }
+
+  .fault-map-detail-body {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .fault-map-detail-body > p {
+    margin-top: 7px;
+    margin-bottom: 9px;
+  }
+
+  .fault-map-detail-body dl {
+    gap: 9px 12px;
+  }
+
+  .fault-detail-primary {
+    margin-top: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fault-map-device-marker::before,
+  .fault-map-fault-marker > i::before,
+  .fault-map-fault-marker > i::after,
+  .fault-distribution-live-state i,
+  .fault-map-loading span {
+    animation: none;
+  }
+}
