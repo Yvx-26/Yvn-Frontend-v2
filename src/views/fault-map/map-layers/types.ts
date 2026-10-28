@@ -1,4 +1,4 @@
-import type { CableLineStatus } from '../fault-distribution/types'
+import type { CableLineStatus } from '../../../domain/map/types'
 
 export type BaseMapType = 'standard' | 'dark' | 'satellite'
 export type MapLayerKey = 'lines' | 'devices' | 'faults' | 'warningAreas' | 'boundary' | 'labels'

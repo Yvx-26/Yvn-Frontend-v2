@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type {
-  DeviceAcquisitionConfig,
   ManagedDevice,
   ManagedDeviceCategory,
   ManagedLine,
 } from '../../../../domain/infrastructure/types'
+import { createAcquisitionConfig } from '../../../../domain/infrastructure/helpers'
 
 const props = defineProps<{
   devices: ManagedDevice[]
@@ -40,22 +40,7 @@ const relatedMonitors = computed(() =>
   props.devices.filter((device) => device.linkedLocatorId === draft.value.id),
 )
 
-const selectedLine = computed(() =>
-  props.lines.find((line) => line.id === draft.value.lineId),
-)
-
-function createAcquisitionConfig(): DeviceAcquisitionConfig {
-  return {
-    batchSize: 4000,
-    uploadMode: 'complete-batch',
-    batchTimeoutSeconds: '30',
-    missingDataPolicy: 'mark-and-upload',
-    sampleRate: '1 MHz',
-    triggerThreshold: '',
-    offlineCacheBatches: '200',
-    backfillEnabled: true,
-  }
-}
+const selectedLine = computed(() => props.lines.find((line) => line.id === draft.value.lineId))
 
 function changeCategory() {
   if (draft.value.category === 'locator') {
@@ -303,7 +288,8 @@ watch(
           </div>
           <p class="device-config-batch-note">
             <strong>{{ draft.acquisition.batchSize }} 点 / 帧</strong>
-            每帧通过 Byte1 标记 A-B 至 N-E 中的一个当前相间，同时携带 10 组相间故障结果和 4000 个采样点。
+            每帧通过 Byte1 标记 A-B 至 N-E 中的一个当前相间，同时携带 10 组相间故障结果和 4000
+            个采样点。
           </p>
         </section>
 

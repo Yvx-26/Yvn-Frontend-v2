@@ -14,132 +14,6 @@
   scrollbar-color: rgba(0, 229, 255, 0.24) transparent;
 }
 
-.operation-situation-metrics {
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 12px;
-  gap: 12px;
-}
-
-.operation-situation-metric {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 104px;
-  align-items: center;
-  padding: 14px 16px;
-  overflow: hidden;
-  background: linear-gradient(135deg, rgba(14, 39, 66, 0.92), rgba(7, 25, 45, 0.86));
-  border: 1px solid rgba(75, 158, 214, 0.22);
-  border-radius: 8px;
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
-  grid-template-columns: 46px minmax(0, 1fr);
-  gap: 13px;
-}
-
-.operation-situation-metric::before {
-  position: absolute;
-  top: 18px;
-  bottom: 18px;
-  left: 0;
-  width: 2px;
-  content: '';
-  background: #1e90ff;
-  box-shadow: 0 0 9px rgba(30, 144, 255, 0.72);
-}
-
-.operation-situation-metric.tone-success::before {
-  background: #22c55e;
-  box-shadow: 0 0 9px rgba(34, 197, 94, 0.68);
-}
-
-.operation-situation-metric-icon {
-  display: grid;
-  width: 46px;
-  height: 46px;
-  place-items: center;
-  color: #50c5ff;
-  background: rgba(30, 144, 255, 0.1);
-  border: 1px solid rgba(80, 197, 255, 0.2);
-  border-radius: 8px;
-}
-
-.tone-success .operation-situation-metric-icon {
-  color: #3ddb81;
-  background: rgba(34, 197, 94, 0.09);
-  border-color: rgba(34, 197, 94, 0.2);
-}
-
-.operation-situation-metric-icon svg {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.operation-situation-metric > div {
-  min-width: 0;
-}
-
-.operation-situation-metric-label,
-.operation-situation-metric strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operation-situation-metric-label {
-  color: #bfd1de;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.operation-situation-metric strong {
-  margin-top: 5px;
-  color: #f4fbff;
-  font-family: Consolas, 'Roboto Mono', monospace;
-  font-size: 29px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.operation-situation-metric small {
-  margin-left: 4px;
-  color: #aec1d0;
-  font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.operation-situation-layout {
-  display: grid;
-  flex: 1;
-  min-height: 0;
-  grid-template-columns: minmax(0, 1.68fr) minmax(310px, 0.78fr);
-  gap: 12px;
-}
-
-.operation-situation-main-column,
-.operation-situation-side-column {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  gap: 12px;
-}
-
-.operation-situation-main-column {
-  grid-template-rows: minmax(300px, 1.3fr) minmax(215px, 0.86fr);
-}
-
-.operation-situation-side-column {
-  grid-template-rows: minmax(235px, 0.86fr) minmax(280px, 1fr);
-}
-
 .operation-situation-bottom-grid {
   display: grid;
   min-width: 0;
@@ -592,10 +466,6 @@
     font-size: 24px;
   }
 
-  .operation-situation-layout {
-    grid-template-columns: minmax(0, 1.5fr) minmax(290px, 0.82fr);
-  }
-
   .operation-situation-chart-summary span {
     max-width: 65%;
   }
@@ -606,14 +476,6 @@
     min-height: 88px;
     padding-top: 10px;
     padding-bottom: 10px;
-  }
-
-  .operation-situation-main-column {
-    grid-template-rows: minmax(270px, 1.25fr) minmax(195px, 0.82fr);
-  }
-
-  .operation-situation-side-column {
-    grid-template-rows: minmax(220px, 0.85fr) minmax(245px, 1fr);
   }
 
   .operation-situation-record-list article {

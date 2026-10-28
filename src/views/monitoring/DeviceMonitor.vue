@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { usePolling } from '../../composables/usePolling'
+import ModuleState from '../../components/common/ModuleState.vue'
+import { linkedMonitorText } from '../../domain/infrastructure/helpers'
 import { useInfrastructureStore } from '../../stores/infrastructure'
-import { fetchDashboardDevices, fetchLatestWaveform } from '../../services/telemetry-api'
+import { fetchLatestWaveform } from '../../services/telemetry-api'
 import { waveformStatistics } from '../../utils/waveform'
-import { createDeviceMonitorRuntimes } from './device-monitor/data'
+import { createDeviceMonitorRuntimes } from './device-monitor/runtime'
 import DeviceDetailPanel from './device-monitor/components/DeviceDetailPanel.vue'
 import DeviceMonitorList from './device-monitor/components/DeviceMonitorList.vue'
 import DeviceTelemetryPanel from './device-monitor/components/DeviceTelemetryPanel.vue'
@@ -16,72 +19,49 @@ const latestDevice = infrastructureStore.devices
   .sort((left, right) => (right.updatedAt || '').localeCompare(left.updatedAt || ''))[0]
 const selectedDeviceId = ref(latestDevice?.id ?? '')
 const isLive = ref(true)
-const reconnecting = ref(false)
-const toastMessage = ref('')
-let statusTimer: number | undefined
-let toastTimer: number | undefined
 
 const selectedDevice = computed(
   () =>
     infrastructureStore.devices.find((device) => device.id === selectedDeviceId.value) ??
-    infrastructureStore.devices[0]!,
+    infrastructureStore.devices[0],
 )
 
 const selectedLine = computed(() =>
-  infrastructureStore.lines.find((line) => line.id === selectedDevice.value.lineId),
+  infrastructureStore.lines.find((line) => line.id === selectedDevice.value?.lineId),
 )
 
-const currentRuntime = computed(() => runtimes.value[selectedDevice.value.id]!)
-const categoryLabels = {
-  monitor: '监测设备',
-  locator: '定位设备',
-  integrated: '一体化终端',
-}
+const currentRuntime = computed(() =>
+  selectedDevice.value ? runtimes.value[selectedDevice.value.id] : undefined,
+)
 
 const relationText = computed(() => {
   const device = selectedDevice.value
-  if (device.category === 'monitor') return `关联定位设备 ${device.linkedLocatorId || '--'}`
-  if (device.category === 'locator') return `关联监测设备 ${device.id.replace('DW', 'JC')}`
-  return '监测与定位功能一体化'
+  return device ? linkedMonitorText(device, infrastructureStore.devices) : ''
 })
 
 const lastSeenText = computed(() => {
   if (!isLive.value) return '已暂停'
-  return selectedDevice.value.lastSeen || '暂无上报'
+  return selectedDevice.value?.lastSeen || '暂无上报'
 })
 
 function toggleLive() {
   isLive.value = !isLive.value
 }
 
-function showToast(message: string) {
-  toastMessage.value = message
-  if (toastTimer) window.clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => (toastMessage.value = ''), 1800)
-}
-
-async function reconnect() {
-  if (reconnecting.value) return
-  reconnecting.value = true
-  try {
-    await refreshDeviceStatus()
-    showToast('设备状态已刷新')
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '设备状态刷新失败')
-  } finally {
-    reconnecting.value = false
-  }
-}
-
-async function refreshDeviceStatus() {
-  if (!isLive.value) return
-  const items = await fetchDashboardDevices()
-  infrastructureStore.applyRuntimeStatus(items)
+async function refreshDeviceStatus(signal: AbortSignal) {
   const runtime = currentRuntime.value
-  const status = items.find((item) => item.imei === selectedDeviceId.value)
-  if (!runtime || !status || selectedDevice.value.category === 'locator') return
-  const frame = await fetchLatestWaveform(selectedDeviceId.value)
-  const samples = frame.waveform_samples ?? []
+  const device = selectedDevice.value
+  if (!runtime || !device) return
+  runtime.signalQuality =
+    device.signalDbm == null
+      ? null
+      : Math.max(0, Math.min(100, Math.round(((device.signalDbm + 100) / 60) * 100)))
+  if (device.latencyMs != null)
+    runtime.latencyHistory = [...runtime.latencyHistory, device.latencyMs].slice(-6)
+  if (device.category === 'locator') return
+  const frame = await fetchLatestWaveform(device.id, null, signal)
+  signal.throwIfAborted()
+  const samples = frame.frame_valid === false ? [] : (frame.waveform_samples ?? [])
   const stats = waveformStatistics(samples)
   runtime.frameId = frame.frame_id ? `#FRAME-${frame.frame_id}` : '--'
   runtime.phase = frame.phase_pair ?? frame.cable ?? '--'
@@ -90,73 +70,54 @@ async function refreshDeviceStatus() {
   runtime.max = stats.max
   runtime.peakAbs = stats.peakAbs
   runtime.integrityPercent = stats.completeness
+  runtime.frameValid = frame.frame_id === null ? null : frame.frame_valid !== false
+  runtime.frameError = frame.frame_valid === false ? frame.frame_error || '协议无效' : ''
   runtime.events = frame.frame_id
     ? [
         {
           id: `frame-${frame.frame_id}`,
-          level: 'normal',
-          title: '最新波形帧已入库',
-          description: `${frame.waveform_points} 个有效采样点`,
-          time: frame.created_at ?? status.last_wave_time ?? '--',
+          level: frame.frame_valid === false ? 'warning' : 'normal',
+          title: frame.frame_valid === false ? '波形帧校验失败' : '最新波形帧已入库',
+          description: runtime.frameError || `${frame.waveform_points} 个有效采样点`,
+          time: frame.created_at ?? '--',
         },
       ]
     : []
 }
 
-onMounted(() => {
-  void reconnect()
-  statusTimer = window.setInterval(() => void refreshDeviceStatus(), 10000)
-})
-
-watch(selectedDeviceId, () => void refreshDeviceStatus())
-
-onBeforeUnmount(() => {
-  if (statusTimer) window.clearInterval(statusTimer)
-  if (toastTimer) window.clearTimeout(toastTimer)
+const { refresh } = usePolling(
+  refreshDeviceStatus,
+  10000,
+  () => isLive.value && Boolean(selectedDevice.value),
+)
+watch(
+  () => infrastructureStore.devices.map((device) => device.id).join('|'),
+  () => {
+    const created = createDeviceMonitorRuntimes(infrastructureStore.devices)
+    Object.keys(runtimes.value).forEach((id) => {
+      if (!created[id]) delete runtimes.value[id]
+    })
+    Object.keys(created).forEach((id) => {
+      if (!runtimes.value[id]) runtimes.value[id] = created[id]!
+    })
+    if (!infrastructureStore.devices.some((device) => device.id === selectedDeviceId.value))
+      selectedDeviceId.value = infrastructureStore.devices[0]?.id ?? ''
+  },
+  { immediate: true },
+)
+watch(selectedDeviceId, () => {
+  void refresh(true)
 })
 </script>
 
 <template>
   <section class="device-monitor-page" aria-label="设备监测">
-    <section class="device-monitor-summary">
-      <div class="device-monitor-summary-device">
-        <span>当前监测对象</span>
-        <div>
-          <i class="device-monitor-state-dot" :class="`is-${selectedDevice.state}`"></i>
-          <strong>{{ selectedDevice.name }}</strong>
-          <em>{{ categoryLabels[selectedDevice.category] }}</em>
-        </div>
-        <small>
-          {{ selectedLine?.name ?? '未绑定线路' }} · {{ selectedDevice.position }} ·
-          {{ relationText }}
-        </small>
-      </div>
-
-      <div class="device-monitor-summary-metric">
-        <span>通信延迟</span>
-        <strong>{{ selectedDevice.latencyMs ?? '--' }}<small>ms</small></strong>
-      </div>
-      <div class="device-monitor-summary-metric">
-        <span>信号强度</span>
-        <strong>{{ selectedDevice.signalDbm ?? '--' }}<small>dBm</small></strong>
-      </div>
-      <div class="device-monitor-summary-metric">
-        <span>最后上报</span>
-        <strong class="is-text">{{ lastSeenText }}</strong>
-      </div>
-      <div class="device-monitor-summary-metric">
-        <span>最新波形帧</span>
-        <strong class="is-text">
-          {{
-            selectedDevice.category === 'locator'
-              ? '不适用'
-              : `${currentRuntime.pointCount} / 4000 点`
-          }}
-        </strong>
-      </div>
-    </section>
-
-    <div class="device-monitor-layout">
+    <ModuleState
+      v-if="!selectedDevice || !currentRuntime"
+      title="暂无设备数据"
+      description="请先在设备配置中添加设备。"
+    />
+    <div v-else class="device-monitor-layout">
       <DeviceMonitorList
         :devices="infrastructureStore.devices"
         :lines="infrastructureStore.lines"
@@ -167,10 +128,6 @@ onBeforeUnmount(() => {
       <DeviceTelemetryPanel :device="selectedDevice" :runtime="currentRuntime" :is-live="isLive">
         <template #actions>
           <div class="monitor-panel-actions" aria-label="设备监测操作">
-            <button type="button" :disabled="reconnecting" @click="reconnect">
-              <svg><use href="#icon-history" /></svg>
-              {{ reconnecting ? '刷新中…' : '刷新状态' }}
-            </button>
             <button type="button" :class="{ 'is-live': isLive }" @click="toggleLive">
               <span>{{ isLive ? 'Ⅱ' : '▶' }}</span
               >{{ isLive ? '暂停刷新' : '继续刷新' }}
@@ -179,13 +136,13 @@ onBeforeUnmount(() => {
         </template>
       </DeviceTelemetryPanel>
 
-      <DeviceDetailPanel :device="selectedDevice" :runtime="currentRuntime" />
+      <DeviceDetailPanel
+        :device="selectedDevice"
+        :runtime="currentRuntime"
+        :line-name="selectedLine?.name ?? '未绑定线路'"
+        :relation-text="relationText"
+        :last-seen-text="lastSeenText"
+      />
     </div>
-
-    <Transition name="device-monitor-toast">
-      <div v-if="toastMessage" class="device-monitor-toast" role="status">
-        <i></i>{{ toastMessage }}
-      </div>
-    </Transition>
   </section>
 </template>

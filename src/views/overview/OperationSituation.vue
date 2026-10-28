@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
+import { usePolling } from '../../composables/usePolling'
 import { fetchOperationDashboard, type OperationDashboard } from '../../services/telemetry-api'
 import CurrentOperationPanel from './operation-situation/components/CurrentOperationPanel.vue'
 import LineVolumePanel from './operation-situation/components/LineVolumePanel.vue'
 import OnlineRatePanel from './operation-situation/components/OnlineRatePanel.vue'
-import OperationMetricCard from './operation-situation/components/OperationMetricCard.vue'
+import MetricCard from '../../components/common/MetricCard.vue'
+import type { Metric as OperationMetric } from '../../components/common/metric'
 import OperationRecordPanel from './operation-situation/components/OperationRecordPanel.vue'
 import ReceiveTrendPanel from './operation-situation/components/ReceiveTrendPanel.vue'
-import type {
-  OperationMetric,
-  OperationRecord,
-  OperationSummaryItem,
-} from './operation-situation/types'
+import type { OperationRecord, OperationSummaryItem } from './operation-situation/types'
 import './operation-situation/operation-situation.css'
+import './overview-layout.css'
 
 const dashboard = ref<OperationDashboard | null>(null)
 
@@ -81,19 +80,26 @@ const operationRecords = computed<OperationRecord[]>(() =>
   })),
 )
 
-onMounted(async () => {
-  dashboard.value = await fetchOperationDashboard()
+usePolling(async (signal) => {
+  const result = await fetchOperationDashboard(signal)
+  signal.throwIfAborted()
+  dashboard.value = result
 })
 </script>
 
 <template>
-  <section class="operation-situation-page" aria-label="运行态势数据看板">
-    <div class="operation-situation-metrics" aria-label="运行核心指标">
-      <OperationMetricCard v-for="metric in operationMetrics" :key="metric.id" :metric="metric" />
+  <section class="operation-situation-page overview-page-layout" aria-label="运行态势数据看板">
+    <div class="operation-situation-metrics overview-metric-grid" aria-label="运行核心指标">
+      <MetricCard
+        variant="operation-situation"
+        v-for="metric in operationMetrics"
+        :key="metric.id"
+        :metric="metric"
+      />
     </div>
 
-    <div class="operation-situation-layout">
-      <div class="operation-situation-main-column">
+    <div class="operation-situation-layout overview-content-grid">
+      <div class="operation-situation-main-column overview-primary-region overview-aligned-column">
         <ReceiveTrendPanel :points="receiveTrend" />
 
         <div class="operation-situation-bottom-grid">
@@ -102,7 +108,10 @@ onMounted(async () => {
         </div>
       </div>
 
-      <aside class="operation-situation-side-column" aria-label="当前运行信息">
+      <aside
+        class="operation-situation-side-column overview-secondary-region overview-aligned-column"
+        aria-label="当前运行信息"
+      >
         <CurrentOperationPanel :items="operationSummary" />
         <OperationRecordPanel :records="operationRecords" />
       </aside>

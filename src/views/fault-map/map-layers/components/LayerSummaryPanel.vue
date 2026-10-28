@@ -55,7 +55,7 @@ function updateOpacity(event: Event) {
 
     <section class="map-layer-summary-section">
       <h3>显示范围</h3>
-      <p>郑州市中心城区 · 高德地图底图</p>
+      <p>当前线路定位范围 · 高德地图底图</p>
       <p>线路由定位设备坐标依次生成</p>
     </section>
   </aside>

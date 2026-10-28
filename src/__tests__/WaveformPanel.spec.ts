@@ -1,7 +1,8 @@
-import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import WaveformPanel from '../views/monitoring/wave-monitor/components/WaveformPanel.vue'
 import type { WaveMonitorRuntime } from '../views/monitoring/wave-monitor/types'
+enableAutoUnmount(afterEach)
 
 class ResizeObserverStub {
   observe = vi.fn<() => void>()
@@ -12,11 +13,11 @@ class ResizeObserverStub {
 globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver
 
 const runtime: WaveMonitorRuntime = {
-  deviceId: 'device-001',
   batchId: '#FRAME-1',
   receiveTime: '12:00:00',
   frameId: 1,
-  createdAt: '2026-09-26 12:00:00',
+  frameValid: true,
+  frameError: '',
   phase: 'N-E',
   faultType: 'NORMAL',
   faultDistanceM: null,
@@ -41,5 +42,27 @@ describe('WaveformPanel', () => {
     await phaseButtons[1]!.trigger('click')
 
     expect(wrapper.emitted('selectPhase')).toEqual([['A-C']])
+  })
+
+  it('opens and closes the realtime waveform fullscreen fallback', async () => {
+    const wrapper = mount(WaveformPanel, {
+      props: {
+        runtime,
+        isLive: true,
+        selectedPhasePair: null,
+      },
+    })
+
+    const fullscreenButton = wrapper.get('[aria-label="全屏查看实时行波"]')
+    await fullscreenButton.trigger('click')
+
+    expect(wrapper.get('.wave-monitor-wave-panel').classes()).toContain('is-fullscreen-fallback')
+    expect(wrapper.get('[aria-label="退出实时行波全屏"]').attributes('aria-pressed')).toBe('true')
+
+    await wrapper.get('[aria-label="退出实时行波全屏"]').trigger('click')
+
+    expect(wrapper.get('.wave-monitor-wave-panel').classes()).not.toContain(
+      'is-fullscreen-fallback',
+    )
   })
 })

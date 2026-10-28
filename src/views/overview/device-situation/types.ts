@@ -1,13 +1,4 @@
-export type DeviceStatus = 'online' | 'receiving' | 'warning' | 'offline'
-
-export interface DeviceMetric {
-  id: string
-  label: string
-  value: string
-  suffix: string
-  icon: string
-  tone: 'primary' | 'success' | 'warning'
-}
+export type DeviceStatus = 'online' | 'warning' | 'offline'
 
 export interface DeviceFrame {
   id: string

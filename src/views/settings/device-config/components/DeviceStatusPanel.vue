@@ -25,10 +25,6 @@ const latencyText = computed(() =>
 const signalText = computed(() =>
   props.device.signalDbm === null ? '--' : `${props.device.signalDbm} dBm`,
 )
-const batchText = computed(() => {
-  if (!props.device.acquisition) return '--'
-  return `${props.device.acquisition.batchSize} / ${props.device.acquisition.batchSize} 完整`
-})
 </script>
 
 <template>
@@ -56,11 +52,22 @@ const batchText = computed(() => {
 
     <section class="device-config-status-section is-health">
       <h3>实时状态</h3>
-      <div><span>网络延迟</span><strong :class="{ 'is-warning': (device.latencyMs ?? 0) > 200 }">{{ latencyText }}</strong></div>
-      <div><span>信号强度</span><strong>{{ signalText }}</strong></div>
-      <div><span>最后通信</span><strong>{{ device.lastSeen }}</strong></div>
-      <div v-if="device.acquisition"><span>最近批次</span><strong class="is-normal">{{ batchText }}</strong></div>
-      <div><span>固件版本</span><strong>{{ device.firmwareVersion }}</strong></div>
+      <div>
+        <span>网络延迟</span
+        ><strong :class="{ 'is-warning': (device.latencyMs ?? 0) > 200 }">{{ latencyText }}</strong>
+      </div>
+      <div>
+        <span>信号强度</span><strong>{{ signalText }}</strong>
+      </div>
+      <div>
+        <span>最后通信</span><strong>{{ device.lastSeen }}</strong>
+      </div>
+      <div v-if="device.acquisition">
+        <span>配置采样点</span><strong>{{ device.acquisition.batchSize }} 点/帧</strong>
+      </div>
+      <div>
+        <span>固件版本</span><strong>{{ device.firmwareVersion || '--' }}</strong>
+      </div>
     </section>
   </aside>
 </template>

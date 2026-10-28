@@ -185,7 +185,8 @@ function buildSceneContent() {
     }
 
     line.devices.forEach((device, deviceIndex) => {
-      const position = points[Math.min(deviceIndex, points.length - 1)]!
+      const position =
+        points[Math.min(line.devices.length === 1 ? 1 : deviceIndex, points.length - 1)]!
       const group = new THREE.Group()
       group.position.copy(position)
       group.userData = { device, line, label: `${device.name} · ${device.statusLabel}` }

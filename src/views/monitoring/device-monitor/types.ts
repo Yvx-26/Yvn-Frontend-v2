@@ -12,7 +12,6 @@ export interface DeviceMonitorEvent {
 }
 
 export interface DeviceMonitorRuntime {
-  deviceId: string
   frameId: string
   phase: string
   pointCount: number
@@ -20,7 +19,9 @@ export interface DeviceMonitorRuntime {
   max: number
   peakAbs: number
   integrityPercent: number
-  signalQuality: number
+  signalQuality: number | null
+  frameValid: boolean | null
+  frameError: string
   latencyHistory: number[]
   events: DeviceMonitorEvent[]
 }

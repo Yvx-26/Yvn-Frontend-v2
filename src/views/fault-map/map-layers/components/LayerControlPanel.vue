@@ -1,13 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CableLineStatus } from '../../fault-distribution/types'
+import type { CableLineStatus } from '../../../../domain/map/types'
 import { baseMapOptions, layerItems } from '../data'
-import type {
-  BaseMapType,
-  LayerVisibility,
-  MapLayerKey,
-  StatusVisibility,
-} from '../types'
+import type { BaseMapType, LayerVisibility, MapLayerKey, StatusVisibility } from '../types'
 
 const props = defineProps<{
   baseMap: BaseMapType
@@ -58,7 +53,9 @@ const statuses: { id: CableLineStatus; label: string }[] = [
       <h3>业务图层</h3>
       <div class="map-layer-switch-list">
         <label v-for="item in layerItems" :key="item.id">
-          <span><svg><use :href="`#icon-${item.icon}`" /></svg>{{ item.label }}</span>
+          <span
+            ><svg><use :href="`#icon-${item.icon}`" /></svg>{{ item.label }}</span
+          >
           <input
             type="checkbox"
             :checked="layerVisibility[item.id]"

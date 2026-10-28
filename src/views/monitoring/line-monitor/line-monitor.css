@@ -704,17 +704,6 @@
   border-bottom-color: #31d8f5;
 }
 
-.line-monitor-batch-cell.is-receiving {
-  color: #f4b746;
-  background: rgba(245, 166, 35, 0.08);
-  border-color: rgba(245, 166, 35, 0.28);
-  border-bottom-color: #f5a623;
-}
-
-.line-monitor-batch-cell.is-receiving strong {
-  color: #f4b746;
-}
-
 .line-monitor-device-list {
   min-height: 0;
   overflow-y: auto;

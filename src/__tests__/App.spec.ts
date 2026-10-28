@@ -1,13 +1,19 @@
-import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory } from 'vue-router'
 import App from '../App.vue'
 import { navigationItems } from '../config/navigation'
 import { createAppRouter } from '../router'
 import { useInfrastructureStore } from '../stores/infrastructure'
+import { overviewRuntimeCache } from '../views/overview/comprehensive/overview-cache'
+enableAutoUnmount(afterEach)
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 
-async function mountAt(path = '/overview/comprehensive') {
+async function mountAt(path = '/overview/comprehensive', emptyWave = false) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
@@ -55,16 +61,18 @@ async function mountAt(path = '/overview/comprehensive') {
         }
         payload = {
           devices: [device],
-          lines: [{
-            id: 'LINE-A',
-            name: '海缆 A 段',
-            type: 'submarine',
-            lengthKm: '18.6',
-            description: '',
-            state: 'enabled',
-            updatedAt: '2026-09-22 15:40:00',
-            devices: [{ ...device, sequence: 1 }],
-          }],
+          lines: [
+            {
+              id: 'LINE-A',
+              name: '海缆 A 段',
+              type: 'submarine',
+              lengthKm: '18.6',
+              description: '',
+              state: 'enabled',
+              updatedAt: '2026-09-22 15:40:00',
+              devices: [{ ...device, sequence: 1 }],
+            },
+          ],
         }
       } else if (url.includes('/api/dashboard/devices')) {
         payload = [
@@ -73,6 +81,20 @@ async function mountAt(path = '/overview/comprehensive') {
             cable_key: 'LINE-A',
             cable_name: '海缆 A 段',
             last_wave_time: '2026-09-22 15:40:00',
+            online: true,
+            age_seconds: 2,
+          },
+        ]
+      } else if (url.includes('/api/dashboard/map')) {
+        payload = [
+          {
+            imei: 'ZT-04',
+            lng: 113.57,
+            lat: 34.83,
+            ts: null,
+            updated_at: '2026-09-22 15:40:00',
+            cable_key: 'LINE-A',
+            cable_name: '海缆 A 段',
             online: true,
             age_seconds: 2,
           },
@@ -96,6 +118,14 @@ async function mountAt(path = '/overview/comprehensive') {
           samples: [],
           waveform_samples: Array.from({ length: 4000 }, (_, index) => index % 128),
         }
+        if (emptyWave)
+          payload = {
+            frame_id: null,
+            waveform_samples: [],
+            samples: [],
+            points: 0,
+            waveform_points: 0,
+          }
       } else if (url.includes('/api/dashboard/operation')) {
         payload = {
           wave_today: 12,
@@ -131,6 +161,71 @@ async function mountAt(path = '/overview/comprehensive') {
 }
 
 describe('App', () => {
+  it.each([
+    ['/overview/comprehensive', '.overview-dashboard'],
+    ['/monitoring/lines', '.line-monitor-page'],
+  ])(
+    'keeps %s visible without banners while detecting and recovering from disconnection',
+    async (path, pageSelector) => {
+      vi.useFakeTimers()
+      const { wrapper } = await mountAt(path)
+      const fetchMock = vi.mocked(fetch)
+      const healthyFetch = fetchMock.getMockImplementation()!
+      const contentBeforeFailure = wrapper.get('.workspace').element.children.length
+      expect(wrapper.get('.connection-state').text()).toBe('平台连接正常')
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: async () => ({ detail: '请求失败（502）' }),
+      } as Response)
+
+      await vi.advanceTimersByTimeAsync(10000)
+      await flushPromises()
+      expect(wrapper.get('.connection-state').text()).toBe('平台连接异常')
+      expect(wrapper.find(pageSelector).exists()).toBe(true)
+      expect(wrapper.get('.workspace').element.children.length).toBe(contentBeforeFailure)
+      expect(wrapper.find('.data-notice').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('部分数据可能不是最新')
+
+      const attemptsAfterFailure = fetchMock.mock.calls.length
+      await vi.advanceTimersByTimeAsync(10000)
+      await flushPromises()
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(attemptsAfterFailure)
+
+      fetchMock.mockImplementation(healthyFetch)
+      await vi.advanceTimersByTimeAsync(10000)
+      await flushPromises()
+      expect(wrapper.get('.connection-state').text()).toBe('平台连接正常')
+      expect(wrapper.find(pageSelector).exists()).toBe(true)
+      expect(wrapper.get('.workspace').element.children.length).toBe(contentBeforeFailure)
+    },
+  )
+
+  it.each([
+    ['/overview/comprehensive', 'overview-primary-region'],
+    ['/overview/operation', 'overview-primary-region'],
+    ['/overview/lines', 'overview-center-region'],
+    ['/overview/devices', 'overview-primary-region'],
+  ])('uses the shared overview grid for %s', async (path, mainClass) => {
+    const { wrapper } = await mountAt(path)
+    const page = wrapper.get('.overview-page-layout')
+    expect(page.findAll('.overview-metric-grid > article')).toHaveLength(4)
+    const content = page.get('.overview-content-grid')
+    expect(content.find(`.${mainClass}`).exists()).toBe(true)
+    expect(content.get('.overview-secondary-region').classes()).toContain('overview-aligned-column')
+    expect(content.find('.overview-list-region').exists()).toBe(path === '/overview/lines')
+  })
+
+  it('clears the overview return cache if the backend no longer has a frame', async () => {
+    const first = await mountAt()
+    expect(overviewRuntimeCache.latestBatch?.samples).toHaveLength(4000)
+    first.wrapper.unmount()
+    const { wrapper } = await mountAt('/overview/comprehensive', true)
+    expect(overviewRuntimeCache.latestBatch).toBeUndefined()
+    expect(wrapper.find('.overview-wave-trace').exists()).toBe(false)
+    expect(wrapper.get('.overview-wave-empty').text()).toContain('等待最新波形数据')
+  })
+
   it('redirects the root route to the comprehensive overview', async () => {
     const { router, wrapper } = await mountAt('/')
 
@@ -193,15 +288,21 @@ describe('App', () => {
     expect(configuredIcons.filter((icon) => !symbolIds.has(icon))).toEqual([])
   })
 
-  it('renders the comprehensive overview with real latest-frame statistics', async () => {
+  it('renders the comprehensive overview with the real latest-frame waveform', async () => {
     const { wrapper } = await mountAt('/overview/comprehensive')
 
     expect(wrapper.text()).toContain('线路运行态势')
-    expect(wrapper.text()).toContain('最新波形帧')
-    expect(wrapper.text()).toContain('完整度 100%')
-    expect(
-      wrapper.findAll('[data-testid="frame-statistics"] .overview-measurement-item'),
-    ).toHaveLength(5)
+    expect(wrapper.get('.overview-batch-panel').attributes('aria-label')).toBe('最新波形曲线')
+    expect(wrapper.get('.overview-wave-header strong').text()).toBe('最新波形曲线')
+    expect(wrapper.get('.overview-wave-header a').attributes('href')).toBe(
+      '/monitoring/waves?device=ZT-04',
+    )
+    const waveformPath =
+      wrapper.get('[data-testid="latest-waveform"] .overview-wave-trace').attributes('d') ?? ''
+    expect(waveformPath).toBeTruthy()
+    expect(waveformPath.match(/[ML]/g)?.length).toBe(4000)
+    expect(wrapper.get('.overview-wave-trace-glow').attributes('d')).toBe(waveformPath)
+    expect(wrapper.findAll('.overview-wave-latest-dot')).toHaveLength(1)
   })
 
   it('renders the device situation and switches the selected device details', async () => {
@@ -218,10 +319,11 @@ describe('App', () => {
     const { wrapper } = await mountAt('/overview/lines')
 
     expect(wrapper.text()).toContain('线路列表')
-    expect(wrapper.text()).toContain('海缆 A 段拓扑')
+    expect(wrapper.text()).toContain('监测节点状态')
+    expect(wrapper.text()).not.toContain('拓扑示意')
     expect(wrapper.findAll('.line-situation-list button')).toHaveLength(1)
     expect(wrapper.find('.line-situation-detail-title').text()).toContain('海缆 A 段')
-    expect(wrapper.findAll('.line-situation-node')).toHaveLength(1)
+    expect(wrapper.findAll('.line-situation-node-table tbody tr')).toHaveLength(1)
   })
 
   it('renders the operation situation with trend and runtime records', async () => {

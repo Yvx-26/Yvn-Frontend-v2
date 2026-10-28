@@ -3,22 +3,25 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { ManagedDevice } from '../../domain/infrastructure/types'
 import { fetchDashboardDevices, fetchDashboardMap } from '../../services/telemetry-api'
 import { useInfrastructureStore } from '../../stores/infrastructure'
+import {
+  cloneDevice,
+  createDeviceDraft,
+  nextAvailableId,
+  hasCoordinate,
+} from '../../domain/infrastructure/helpers'
+import { isRequestCancelled } from '../../services/http'
+import ModuleState from '../../components/common/ModuleState.vue'
+import { RouterLink } from 'vue-router'
 import DeviceEditorPanel from './device-config/components/DeviceEditorPanel.vue'
 import DeviceListPanel from './device-config/components/DeviceListPanel.vue'
 import DeviceStatusPanel from './device-config/components/DeviceStatusPanel.vue'
 import './device-config/device-config.css'
 
-function cloneDevice(device: ManagedDevice): ManagedDevice {
-  return JSON.parse(JSON.stringify(device)) as ManagedDevice
-}
-
 const infrastructureStore = useInfrastructureStore()
-const initialDevice =
-  infrastructureStore.devices.find((device) => device.id === 'JC-04') ??
-  infrastructureStore.devices[0]!
-const selectedDeviceId = ref(initialDevice.id)
-const editingOriginalId = ref(initialDevice.id)
-const draft = ref<ManagedDevice>(cloneDevice(initialDevice))
+const initialDevice = infrastructureStore.devices[0]
+const selectedDeviceId = ref(initialDevice?.id ?? '')
+const editingOriginalId = ref(initialDevice?.id ?? '')
+const draft = ref<ManagedDevice>(initialDevice ? cloneDevice(initialDevice) : createDeviceDraft())
 const isCreating = ref(false)
 const isSaving = ref(false)
 const saveError = ref('')
@@ -26,6 +29,7 @@ const testingConnection = ref(false)
 const connectionTestPassed = ref(false)
 const saveMessageVisible = ref(false)
 let toastTimer: number | undefined
+let testController: AbortController | undefined
 
 const selectedLine = computed(() =>
   infrastructureStore.lines.find((line) => line.id === draft.value.lineId),
@@ -53,6 +57,10 @@ const isComplete = computed(
     Boolean(draft.value.name.trim()) &&
     Boolean(draft.value.lineId) &&
     !duplicateId.value &&
+    hasCoordinate(draft.value.coordinate) &&
+    (!draft.value.acquisition ||
+      (Number.isInteger(draft.value.acquisition.batchSize) &&
+        draft.value.acquisition.batchSize > 0)) &&
     (draft.value.category !== 'monitor' || Boolean(locationDevice.value)),
 )
 
@@ -61,6 +69,12 @@ const validationText = computed(() => {
   if (duplicateId.value) return '设备编号已存在，请使用唯一编号'
   if (!draft.value.id.trim() || !draft.value.name.trim()) return '请补充设备编号和设备名称'
   if (!draft.value.lineId) return '请选择设备所属线路'
+  if (!hasCoordinate(draft.value.coordinate)) return '请填写有效的经纬度，或为监测设备关联定位节点'
+  if (
+    draft.value.acquisition &&
+    (!Number.isInteger(draft.value.acquisition.batchSize) || draft.value.acquisition.batchSize <= 0)
+  )
+    return '采样点数须为正整数'
   if (draft.value.category === 'monitor' && !locationDevice.value) {
     return '监测设备必须关联所属线路中的定位设备'
   }
@@ -68,6 +82,7 @@ const validationText = computed(() => {
 })
 
 function loadDevice(device: ManagedDevice) {
+  saveError.value = ''
   selectedDeviceId.value = device.id
   editingOriginalId.value = device.id
   isCreating.value = false
@@ -76,60 +91,31 @@ function loadDevice(device: ManagedDevice) {
 }
 
 function createDevice() {
-  const line = infrastructureStore.lines[0]!
-  const locator = infrastructureStore.devices.find(
-    (device) => device.lineId === line.id && device.category !== 'monitor',
+  const line = infrastructureStore.lines[0]
+  if (!line) return
+  const id = nextAvailableId(
+    'NEW',
+    infrastructureStore.devices.map((device) => device.id),
   )
-  const sequence = infrastructureStore.devices.length + 1
-  const id = `NEW-${String(sequence).padStart(2, '0')}`
+  saveError.value = ''
   isCreating.value = true
   selectedDeviceId.value = id
   editingOriginalId.value = ''
   connectionTestPassed.value = false
-  draft.value = {
-    id,
-    name: '新建行波监测终端',
-    category: 'monitor',
-    lineId: line.id,
-    position: '待配置监测点',
-    coordinate: locator ? [...locator.coordinate] : [113.545, 34.818],
-    linkedLocatorId: locator?.id ?? '',
-    state: 'offline',
-    enabled: true,
-    lastSeen: '尚未连接',
-    latencyMs: null,
-    signalDbm: null,
-    firmwareVersion: 'v1.0.0',
-    updatedAt: '尚未保存',
-    network: {
-      accessMode: 'ethernet',
-      protocol: 'MQTT',
-      ipAddress: '192.168.10.100',
-      serverPort: '1883',
-      uploadTopic: `cable/device/${id.toLowerCase()}/data`,
-      heartbeatSeconds: '30',
-      retrySeconds: '5',
-      timeoutSeconds: '10',
-      offlineThresholdSeconds: '90',
-    },
-    acquisition: {
-      batchSize: 4000,
-      uploadMode: 'complete-batch',
-      batchTimeoutSeconds: '30',
-      missingDataPolicy: 'mark-and-upload',
-      sampleRate: '1 MHz',
-      triggerThreshold: '',
-      offlineCacheBatches: '200',
-      backfillEnabled: true,
-    },
-  }
+  draft.value = { ...createDeviceDraft(id, line.id), name: '新建设备' }
 }
 
 function cancelChanges() {
   const original = infrastructureStore.devices.find(
     (device) => device.id === editingOriginalId.value,
   )
-  loadDevice(original ?? infrastructureStore.devices[0]!)
+  const fallback = original ?? infrastructureStore.devices[0]
+  if (fallback) loadDevice(fallback)
+  else {
+    isCreating.value = false
+    draft.value = createDeviceDraft()
+    selectedDeviceId.value = ''
+  }
 }
 
 async function saveChanges() {
@@ -150,22 +136,43 @@ async function saveChanges() {
 }
 
 async function testConnection() {
+  testController?.abort()
+  const controller = new AbortController()
+  testController = controller
+  const requestedId = draft.value.id
+  const requestedCategory = draft.value.category
   testingConnection.value = true
   connectionTestPassed.value = false
   saveError.value = ''
   try {
-    if (draft.value.category === 'locator') {
-      const points = await fetchDashboardMap()
-      connectionTestPassed.value = points.some((point) => point.imei === draft.value.id)
+    let online = false
+    if (requestedCategory === 'integrated') {
+      const results = await Promise.allSettled([
+        fetchDashboardDevices(controller.signal),
+        fetchDashboardMap(controller.signal),
+      ])
+      online = results.some(
+        (result) =>
+          result.status === 'fulfilled' &&
+          result.value.some((item) => item.imei === requestedId && item.online),
+      )
+      const failure = results.find((result) => result.status === 'rejected')
+      if (!online && failure?.status === 'rejected') throw failure.reason
+    } else if (requestedCategory === 'locator') {
+      const points = await fetchDashboardMap(controller.signal)
+      online = points.some((point) => point.imei === requestedId && point.online)
     } else {
-      const devices = await fetchDashboardDevices()
-      connectionTestPassed.value = devices.some((device) => device.imei === draft.value.id)
+      const devices = await fetchDashboardDevices(controller.signal)
+      online = devices.some((device) => device.imei === requestedId && device.online)
     }
-    if (!connectionTestPassed.value) saveError.value = '后端尚未收到该设备的真实上报数据'
+    if (controller.signal.aborted || draft.value.id !== requestedId) return
+    connectionTestPassed.value = online
+    if (!online) saveError.value = '设备当前不在线，未检测到近期上报'
   } catch (error) {
-    saveError.value = error instanceof Error ? error.message : '真实连接状态检查失败'
+    if (!isRequestCancelled(error))
+      saveError.value = error instanceof Error ? error.message : '真实连接状态检查失败'
   } finally {
-    testingConnection.value = false
+    if (testController === controller) testingConnection.value = false
   }
 }
 
@@ -184,7 +191,17 @@ watch(
   },
 )
 
+watch(
+  () => [draft.value.id, draft.value.category, JSON.stringify(draft.value.network)],
+  () => {
+    testController?.abort()
+    connectionTestPassed.value = false
+    testingConnection.value = false
+  },
+)
+
 onBeforeUnmount(() => {
+  testController?.abort()
   if (toastTimer) window.clearTimeout(toastTimer)
 })
 </script>
@@ -197,14 +214,37 @@ onBeforeUnmount(() => {
         <span>统一维护监测设备、定位设备及一体化终端</span>
       </div>
       <div class="device-config-toolbar-actions">
-        <button type="button"><svg><use href="#icon-download" /></svg>批量导入</button>
-        <button type="button" class="is-primary" @click="createDevice">
+        <button type="button" disabled title="批量导入尚未开放">
+          <svg><use href="#icon-download" /></svg>批量导入（未开放）
+        </button>
+        <button
+          type="button"
+          class="is-primary"
+          :disabled="!infrastructureStore.lines.length"
+          @click="createDevice"
+        >
           <span>＋</span>新增设备
         </button>
       </div>
     </header>
 
-    <div class="device-config-layout">
+    <ModuleState
+      v-if="!infrastructureStore.lines.length"
+      title="请先建立线路档案"
+      description="设备需要关联已建立的线路。"
+    >
+    </ModuleState>
+    <RouterLink v-if="!infrastructureStore.lines.length" to="/settings/lines"
+      >前往线路管理</RouterLink
+    >
+    <ModuleState
+      v-else-if="!infrastructureStore.devices.length && !isCreating"
+      title="尚未配置设备"
+      description="可以先添加定位设备，再为监测设备建立关联。"
+      action-label="新增设备"
+      @action="createDevice"
+    />
+    <div v-else class="device-config-layout">
       <DeviceListPanel
         :devices="infrastructureStore.devices"
         :lines="infrastructureStore.lines"
@@ -221,20 +261,24 @@ onBeforeUnmount(() => {
         @test-connection="testConnection"
       />
 
-      <DeviceStatusPanel
-        :device="draft"
-        :line="selectedLine"
-        :location-device="locationDevice"
-      />
+      <DeviceStatusPanel :device="draft" :line="selectedLine" :location-device="locationDevice" />
     </div>
 
-    <footer class="device-config-actionbar">
+    <footer
+      v-if="infrastructureStore.lines.length && (infrastructureStore.devices.length || isCreating)"
+      class="device-config-actionbar"
+    >
       <div class="device-config-validation" :class="{ 'is-incomplete': !isComplete }">
         <i></i><span>{{ validationText }}</span>
       </div>
       <div>
         <button type="button" @click="cancelChanges">取消修改</button>
-        <button type="button" class="is-primary" :disabled="!isComplete || isSaving" @click="saveChanges">
+        <button
+          type="button"
+          class="is-primary"
+          :disabled="!isComplete || isSaving"
+          @click="saveChanges"
+        >
           {{ isSaving ? '保存中…' : '保存配置' }}
         </button>
       </div>

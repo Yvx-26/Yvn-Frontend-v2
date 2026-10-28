@@ -7,11 +7,11 @@ export function createWaveMonitorRuntimes(devices: ManagedDevice[]) {
   return Object.fromEntries(
     monitorDevices.map((device) => {
       const runtime: WaveMonitorRuntime = {
-        deviceId: device.id,
         batchId: '等待真实波形',
         receiveTime: '--',
         frameId: null,
-        createdAt: null,
+        frameValid: null,
+        frameError: '',
         phase: null,
         faultType: null,
         faultDistanceM: null,

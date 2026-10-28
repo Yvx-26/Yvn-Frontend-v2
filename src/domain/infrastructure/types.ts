@@ -51,6 +51,11 @@ export interface BoundLineDevice extends ManagedDevice {
   sequence: number
 }
 
+export type DeviceConfiguration = Omit<
+  ManagedDevice,
+  'state' | 'lastSeen' | 'latencyMs' | 'signalDbm' | 'updatedAt'
+>
+
 export interface ManagedLine {
   id: string
   name: string

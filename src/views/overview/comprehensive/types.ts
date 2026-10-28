@@ -10,25 +10,13 @@ export interface OverviewMetric {
   note: string
 }
 
-export interface LineNode {
-  id: string
-  name: string
-  position: string
-  status: 'normal' | 'warning'
-  top: string
-  left: string
-}
-
 export interface MonitoringFrame {
   id: string
-  deviceName: string
-  receivedAt: string
-  phase: string
-  pointCount: number
+  deviceId: string
+  samples: number[]
   min: number
   max: number
-  peakAbs: number
-  completeness: number
+  error: string
 }
 
 export interface MonitoredDevice {

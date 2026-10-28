@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { lineColors, deviceStateLabels } from '../../domain/infrastructure/helpers'
 import { useInfrastructureStore } from '../../stores/infrastructure'
 import LineTreePanel from './line-topology/components/LineTreePanel.vue'
-import Topology3DScene from './line-topology/components/Topology3DScene.vue'
 import TopologyCanvas from './line-topology/components/TopologyCanvas.vue'
 import TopologyDetailPanel from './line-topology/components/TopologyDetailPanel.vue'
 import type { TopologyDevice, TopologyFocusMode, TopologyLine } from './line-topology/types'
 import './line-topology/line-topology.css'
 
 const infrastructureStore = useInfrastructureStore()
-const colors = ['#00d8ff', '#3c8cff', '#f5a623', '#8c7bff']
+const Topology3DScene = defineAsyncComponent(
+  () => import('./line-topology/components/Topology3DScene.vue'),
+)
 const topologyLines = computed<TopologyLine[]>(() =>
   infrastructureStore.lines.map((line, lineIndex) => {
     const ordered = line.devices.slice().sort((left, right) => left.sequence - right.sequence)
@@ -19,8 +21,7 @@ const topologyLines = computed<TopologyLine[]>(() =>
       position: device.position || '未配置位置',
       sequence: device.sequence,
       status: device.state,
-      statusLabel:
-        device.state === 'online' ? '在线' : device.state === 'warning' ? '数据预警' : '离线',
+      statusLabel: deviceStateLabels[device.state],
       latency: device.latencyMs == null ? '--' : `${device.latencyMs} ms`,
       lastUpload: device.lastSeen || '--',
       linkedDeviceIds: [ordered[index - 1]?.id, ordered[index + 1]?.id].filter((id): id is string =>
@@ -32,9 +33,9 @@ const topologyLines = computed<TopologyLine[]>(() =>
       id: line.id,
       name: line.name,
       length: line.lengthKm ? `${line.lengthKm} km` : '--',
-      color: colors[lineIndex % colors.length]!,
-      status: warning ? 'warning' : 'normal',
-      statusLabel: warning ? '存在离线设备' : '运行正常',
+      color: lineColors[lineIndex % lineColors.length]!,
+      status: warning || !devices.length ? 'warning' : 'normal',
+      statusLabel: !devices.length ? '待接入节点' : warning ? '存在离线或预警设备' : '运行正常',
       devices,
     }
   }),
@@ -45,6 +46,19 @@ const viewMode = ref<'3d' | '2d'>('3d')
 const sceneRevision = ref(0)
 const selectedLineId = ref('all')
 const selectedDeviceId = ref(topologyLines.value[0]?.devices[0]?.id ?? '')
+
+watch(
+  () =>
+    topologyLines.value
+      .map((line) => `${line.id}:${line.devices.map((device) => device.id).join(',')}`)
+      .join('|'),
+  () => {
+    const lines = topologyLines.value
+    if (!lines.some((line) => line.id === focusMode.value)) setFocusMode('all')
+    if (!lines.some((line) => line.devices.some((device) => device.id === selectedDeviceId.value)))
+      selectedDeviceId.value = lines[0]?.devices[0]?.id ?? ''
+  },
+)
 
 const selectedDevice = computed(() =>
   topologyLines.value

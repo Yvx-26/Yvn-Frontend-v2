@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type {
-  TopologyDevice,
-  TopologyFocusMode,
-  TopologyLine,
-  TopologyNodeLayout,
-} from '../types'
+import type { TopologyDevice, TopologyFocusMode, TopologyLine, TopologyNodeLayout } from '../types'
 
 const props = defineProps<{
   lines: TopologyLine[]
@@ -18,7 +13,8 @@ const emit = defineEmits<{
   'select-line': [line: TopologyLine]
 }>()
 
-const laneY = [145, 305, 490]
+const canvasHeight = computed(() => Math.max(610, props.lines.length * 180 + 70))
+const laneY = computed(() => props.lines.map((_, index) => 130 + index * 180))
 
 const nodeLayouts = computed<TopologyNodeLayout[]>(() =>
   props.lines.flatMap((line, lineIndex) => {
@@ -30,7 +26,7 @@ const nodeLayouts = computed<TopologyNodeLayout[]>(() =>
       device,
       line,
       x: mainDevices.length === 1 ? 500 : 110 + (780 / (mainDevices.length - 1)) * index,
-      y: laneY[lineIndex]!,
+      y: laneY.value[lineIndex]!,
     }))
     const branchLayouts = line.devices
       .filter((device) => device.parentId)
@@ -40,7 +36,7 @@ const nodeLayouts = computed<TopologyNodeLayout[]>(() =>
           device,
           line,
           x: (parent?.x ?? 500) + 115 + index * 100,
-          y: (parent?.y ?? laneY[lineIndex]!) + 88,
+          y: (parent?.y ?? laneY.value[lineIndex]!) + 88,
         }
       })
     return [...mainLayouts, ...branchLayouts]
@@ -57,7 +53,7 @@ const lineLayouts = computed(() =>
     )
     return {
       line,
-      y: laneY[lineIndex]!,
+      y: laneY.value[lineIndex]!,
       startX: mainNodes[0]?.x ?? 110,
       endX: mainNodes[mainNodes.length - 1]?.x ?? 890,
       mainNodes,
@@ -81,13 +77,15 @@ function isNodeDimmed(lineId: string) {
 function nodeStyle(layout: TopologyNodeLayout) {
   return {
     left: `${(layout.x / 1000) * 100}%`,
-    top: `${(layout.y / 610) * 100}%`,
+    top: `${(layout.y / canvasHeight.value) * 100}%`,
   }
 }
 
 function faultPath(line: TopologyLine) {
   if (!line.faultSegment) return ''
-  const from = nodeLayouts.value.find((layout) => layout.device.id === line.faultSegment!.fromDeviceId)
+  const from = nodeLayouts.value.find(
+    (layout) => layout.device.id === line.faultSegment!.fromDeviceId,
+  )
   const to = nodeLayouts.value.find((layout) => layout.device.id === line.faultSegment!.toDeviceId)
   return from && to ? `M${from.x} ${from.y}H${to.x}` : ''
 }
@@ -95,7 +93,12 @@ function faultPath(line: TopologyLine) {
 
 <template>
   <section class="topology-canvas" aria-label="线路拓扑画布">
-    <svg viewBox="0 0 1000 610" preserveAspectRatio="none" role="img" aria-label="电缆线路及定位设备连接拓扑">
+    <svg
+      :viewBox="`0 0 1000 ${canvasHeight}`"
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="电缆线路及定位设备连接拓扑"
+    >
       <g
         v-for="layout in lineLayouts"
         :key="layout.line.id"
@@ -104,19 +107,13 @@ function faultPath(line: TopologyLine) {
         @click="emit('select-line', layout.line)"
       >
         <text class="topology-lane-label" x="24" :y="layout.y - 18">{{ layout.line.name }}</text>
-        <path
-          class="topology-line-shadow"
-          :d="`M${layout.startX} ${layout.y}H${layout.endX}`"
-        />
+        <path class="topology-line-shadow" :d="`M${layout.startX} ${layout.y}H${layout.endX}`" />
         <path
           class="topology-main-line"
           :style="{ stroke: layout.line.color }"
           :d="`M${layout.startX} ${layout.y}H${layout.endX}`"
         />
-        <path
-          class="topology-line-flow"
-          :d="`M${layout.startX} ${layout.y}H${layout.endX}`"
-        />
+        <path class="topology-line-flow" :d="`M${layout.startX} ${layout.y}H${layout.endX}`" />
 
         <template v-for="branch in layout.branches" :key="branch.branch.device.id">
           <path

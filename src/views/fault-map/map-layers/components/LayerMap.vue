@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { loadAmap } from '../../fault-distribution/amap-loader'
+import { loadAmap } from '../../../../integrations/amap/loader'
+import { markerContent } from '../../../../integrations/amap/markers'
 import type {
   AMapMapInstance,
   AMapNamespace,
   AMapOverlay,
+} from '../../../../integrations/amap/types'
+import type {
   CableLine,
   CableLineStatus,
   LocatedFault,
   PositioningDevice,
-} from '../../fault-distribution/types'
+} from '../../../../domain/map/types'
 import type { BaseMapType, LayerVisibility, StatusVisibility } from '../types'
 
 const props = defineProps<{
@@ -31,6 +34,7 @@ let boundaryOverlay: AMapOverlay | undefined
 let satelliteOverlays: AMapOverlay[] = []
 let map: AMapMapInstance | undefined
 let AMapApi: AMapNamespace | undefined
+let disposed = false
 
 const lineColors: Record<CableLineStatus, string> = {
   normal: '#22c55e',
@@ -39,17 +43,13 @@ const lineColors: Record<CableLineStatus, string> = {
 }
 
 function createDeviceContent(device: PositioningDevice) {
-  const marker = document.createElement('div')
-  marker.className = `map-layer-device-marker is-${device.status}`
-  marker.innerHTML = `<i></i><span>${device.id}</span>`
+  const marker = markerContent(`map-layer-device-marker is-${device.status}`, device.id)
   marker.setAttribute('aria-label', `${device.name}，${device.statusLabel}`)
   return marker
 }
 
 function createFaultContent(fault: LocatedFault) {
-  const marker = document.createElement('div')
-  marker.className = 'map-layer-fault-marker'
-  marker.innerHTML = `<i></i><span><strong>${fault.title}</strong><small>${fault.distanceFromDevice}</small></span>`
+  const marker = markerContent('map-layer-fault-marker', fault.title, fault.distanceFromDevice)
   marker.setAttribute('aria-label', `故障点：${fault.title}`)
   return marker
 }
@@ -75,9 +75,7 @@ function applyBaseMap() {
     return
   }
 
-  map.setMapStyle(
-    props.baseMap === 'dark' ? 'amap://styles/darkblue' : 'amap://styles/normal',
-  )
+  map.setMapStyle(props.baseMap === 'dark' ? 'amap://styles/darkblue' : 'amap://styles/normal')
 }
 
 function applyLayerState() {
@@ -115,9 +113,7 @@ function applyLayerState() {
   setOverlayVisible(boundaryOverlay, props.layerVisibility.boundary)
   boundaryOverlay?.setOptions({ strokeOpacity: 0.7 * opacity })
   map.setFeatures(
-    props.layerVisibility.labels
-      ? ['bg', 'road', 'building', 'point']
-      : ['bg', 'road', 'building'],
+    props.layerVisibility.labels ? ['bg', 'road', 'building', 'point'] : ['bg', 'road', 'building'],
   )
 }
 
@@ -197,12 +193,20 @@ function createLineLayers(AMap: AMapNamespace, line: CableLine) {
 
 async function initializeMap() {
   if (!mapContainer.value) return
+  isLoading.value = true
+  loadError.value = ''
+  map?.destroy()
+  map = undefined
+  lineOverlays.clear()
+  deviceOverlays.clear()
+  faultOverlays.clear()
+  warningAreaOverlays.clear()
+  boundaryOverlay = undefined
+  satelliteOverlays = []
 
   try {
-    AMapApi = await loadAmap(
-      import.meta.env.VITE_AMAP_KEY,
-      import.meta.env.VITE_AMAP_SECURITY_CODE,
-    )
+    AMapApi = await loadAmap(import.meta.env.VITE_AMAP_KEY, import.meta.env.VITE_AMAP_SECURITY_CODE)
+    if (disposed || !mapContainer.value) return
     map = new AMapApi.Map(mapContainer.value, {
       center: [113.545, 34.818],
       zoom: 12,
@@ -212,26 +216,8 @@ async function initializeMap() {
       viewMode: '2D',
     })
 
-    const overlays = props.lines.flatMap((line) => createLineLayers(AMapApi!, line))
-    boundaryOverlay = new AMapApi.Polyline({
-      path: [
-        [113.438, 34.878],
-        [113.558, 34.9],
-        [113.672, 34.864],
-        [113.684, 34.77],
-        [113.556, 34.746],
-        [113.443, 34.778],
-        [113.438, 34.878],
-      ],
-      strokeColor: '#778bff',
-      strokeOpacity: 0.7,
-      strokeWeight: 2,
-      strokeStyle: 'dashed',
-      zIndex: 24,
-    })
-    overlays.push(boundaryOverlay)
-    map.add(overlays)
-    map.setFitView([...lineOverlays.values()], false, [70, 300, 70, 300])
+    rebuildLayers()
+    if (lineOverlays.size) map.setFitView([...lineOverlays.values()], false, [70, 300, 70, 300])
     applyBaseMap()
     applyLayerState()
     isLoading.value = false
@@ -241,11 +227,54 @@ async function initializeMap() {
   }
 }
 
+function rebuildLayers() {
+  if (!map || !AMapApi) return
+  const previous = [
+    ...lineOverlays.values(),
+    ...[...deviceOverlays.values()].flat(),
+    ...faultOverlays.values(),
+    ...warningAreaOverlays.values(),
+    ...(boundaryOverlay ? [boundaryOverlay] : []),
+  ]
+  if (previous.length) map.remove(previous)
+  lineOverlays.clear()
+  deviceOverlays.clear()
+  faultOverlays.clear()
+  warningAreaOverlays.clear()
+  boundaryOverlay = undefined
+  const overlays = props.lines.flatMap((line) => createLineLayers(AMapApi!, line))
+  const points = props.lines.flatMap((line) => line.devices.map((device) => device.coordinate))
+  if (points.length) {
+    const left = Math.min(...points.map((point) => point[0])) - 0.003
+    const right = Math.max(...points.map((point) => point[0])) + 0.003
+    const top = Math.max(...points.map((point) => point[1])) + 0.003
+    const bottom = Math.min(...points.map((point) => point[1])) - 0.003
+    boundaryOverlay = new AMapApi.Polyline({
+      path: [
+        [left, top],
+        [right, top],
+        [right, bottom],
+        [left, bottom],
+        [left, top],
+      ],
+      strokeColor: '#778bff',
+      strokeOpacity: 0.7,
+      strokeWeight: 2,
+      strokeStyle: 'dashed',
+      zIndex: 24,
+    })
+    overlays.push(boundaryOverlay)
+  }
+  if (overlays.length) map.add(overlays)
+  applyLayerState()
+}
+
 function focusAllLines() {
   map?.setFitView([...lineOverlays.values()], false, [70, 300, 70, 300])
 }
 
 watch(() => props.baseMap, applyBaseMap)
+watch(() => props.lines, rebuildLayers, { deep: true })
 watch(
   () => [props.layerVisibility, props.statusVisibility, props.overlayOpacity],
   applyLayerState,
@@ -253,7 +282,11 @@ watch(
 )
 
 onMounted(initializeMap)
-onBeforeUnmount(() => map?.destroy())
+onBeforeUnmount(() => {
+  disposed = true
+  map?.destroy()
+  map = undefined
+})
 </script>
 
 <template>
@@ -265,7 +298,10 @@ onBeforeUnmount(() => map?.destroy())
     </div>
     <div v-else-if="loadError" class="map-layer-error" role="alert">
       <svg><use href="#icon-warning" /></svg>
-      <div><strong>地图加载失败</strong><span>{{ loadError }}</span></div>
+      <div>
+        <strong>地图加载失败</strong><span>{{ loadError }}</span
+        ><button type="button" @click="initializeMap">重试</button>
+      </div>
     </div>
 
     <div class="map-layer-tools">
@@ -276,7 +312,6 @@ onBeforeUnmount(() => map?.destroy())
       </button>
     </div>
 
-    <div class="map-layer-scale"><i></i><span>5 km</span></div>
     <div class="map-layer-map-note">线路由定位设备坐标按顺序生成</div>
   </div>
 </template>

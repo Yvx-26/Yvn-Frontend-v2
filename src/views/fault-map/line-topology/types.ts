@@ -1,4 +1,4 @@
-import type { CableLineStatus, DeviceMapStatus } from '../fault-distribution/types'
+import type { CableLineStatus, DeviceMapStatus } from '../../../domain/map/types'
 
 export type TopologyFocusMode = string
 

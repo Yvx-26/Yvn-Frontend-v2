@@ -11,6 +11,6 @@ export const layerItems: LayerItem[] = [
   { id: 'devices', label: '定位设备', icon: 'device-monitor' },
   { id: 'faults', label: '故障点', icon: 'lightning' },
   { id: 'warningAreas', label: '告警区域', icon: 'siren' },
-  { id: 'boundary', label: '行政边界', icon: 'map-points' },
+  { id: 'boundary', label: '定位覆盖范围', icon: 'map-points' },
   { id: 'labels', label: '地名标注', icon: 'map-points' },
 ]

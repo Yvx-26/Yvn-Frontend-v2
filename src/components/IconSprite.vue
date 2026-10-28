@@ -1,12 +1,5 @@
 <template>
   <svg class="icon-sprite" aria-hidden="true">
-    <symbol id="icon-dashboard" viewBox="0 0 24 24">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-    </symbol>
-
     <symbol id="icon-route" viewBox="0 0 24 24">
       <circle cx="5" cy="18" r="2" />
       <circle cx="19" cy="6" r="2" />
@@ -20,10 +13,6 @@
       <path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6" />
     </symbol>
 
-    <symbol id="icon-wave" viewBox="0 0 24 24">
-      <path d="M2 12h3l2-6 4 12 3-9 2 6 2-3h4" />
-    </symbol>
-
     <symbol id="icon-warning" viewBox="0 0 24 24">
       <path
         d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"
@@ -34,13 +23,6 @@
     <symbol id="icon-history" viewBox="0 0 24 24">
       <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
       <path d="M3 3v5h5M12 7v5l3 2" />
-    </symbol>
-
-    <symbol id="icon-settings" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="3" />
-      <path
-        d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"
-      />
     </symbol>
 
     <!-- 首页总览 -->
@@ -238,11 +220,6 @@
     <symbol id="icon-monitor" viewBox="0 0 24 24">
       <rect x="2" y="3" width="20" height="14" rx="2" />
       <path d="M8 21h8M12 17v4" />
-    </symbol>
-
-    <symbol id="icon-camera" viewBox="0 0 24 24">
-      <path d="M14.5 5 13 3h-2L9.5 5H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4.5Z" />
-      <circle cx="12" cy="12.5" r="4" />
     </symbol>
 
     <symbol id="icon-zoom-in" viewBox="0 0 24 24">

@@ -11,42 +11,12 @@ import type {
   MapLayerKey,
   StatusVisibility,
 } from './map-layers/types'
-import type { CableLineStatus } from './fault-distribution/types'
-import type { CableLine } from './fault-distribution/types'
+import type { CableLineStatus } from '../../domain/map/types'
+import { toCableLines } from '../../domain/map/lines'
 import './map-layers/map-layers.css'
 
 const infrastructureStore = useInfrastructureStore()
-const colors = ['#00d8ff', '#3c8cff', '#f5a623', '#8c7bff']
-const cableLines = computed<CableLine[]>(() =>
-  infrastructureStore.lines
-    .filter((line) => line.devices.length > 0)
-    .map((line, lineIndex): CableLine => {
-      const devices = line.devices
-        .filter((device) => device.coordinate[0] !== 0 || device.coordinate[1] !== 0)
-        .map((device) => ({
-          id: device.id,
-          name: device.name,
-          sequence: device.sequence,
-          coordinate: device.coordinate,
-          status: device.state,
-          statusLabel:
-            device.state === 'online' ? '在线' : device.state === 'warning' ? '数据预警' : '离线',
-          latency: device.latencyMs == null ? '--' : `${device.latencyMs} ms`,
-          lastUpload: device.lastSeen,
-        }))
-      const warning = devices.some((device) => device.status !== 'online')
-      return {
-        id: line.id,
-        name: line.name,
-        length: line.lengthKm ? `${line.lengthKm} km` : '--',
-        status: warning ? 'warning' : 'normal',
-        statusLabel: warning ? '存在离线设备' : '运行正常',
-        color: colors[lineIndex % colors.length]!,
-        devices,
-      }
-    })
-    .filter((line) => line.devices.length > 0),
-)
+const cableLines = computed(() => toCableLines(infrastructureStore.lines))
 
 const baseMap = ref<BaseMapType>('dark')
 const overlayOpacity = ref(85)
@@ -87,7 +57,10 @@ function toggleStatus(status: CableLineStatus) {
       :status-visibility="statusVisibility"
     />
 
-    <div class="map-layers-service-state"><i></i>地图服务正常 · 图层配置实时生效</div>
+    <div class="map-layers-service-state">
+      <i></i>{{ infrastructureStore.backendConnected ? '数据持续同步' : '数据连接异常' }} ·
+      图层配置实时生效
+    </div>
 
     <LayerControlPanel
       :base-map="baseMap"

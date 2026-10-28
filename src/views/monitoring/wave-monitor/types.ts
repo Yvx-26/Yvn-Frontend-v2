@@ -1,3 +1,5 @@
+import type { InterphaseFaultResult } from '../../../services/telemetry-api'
+
 export type WaveSourceFilter = 'all' | 'warning'
 
 export interface WaveMonitorEvent {
@@ -8,19 +10,12 @@ export interface WaveMonitorEvent {
   time: string
 }
 
-export interface InterphaseFaultResult {
-  type: string
-  code: number
-  distance_m: number | null
-  distance_raw: number
-}
-
 export interface WaveMonitorRuntime {
-  deviceId: string
   batchId: string
   receiveTime: string
   frameId: number | null
-  createdAt: string | null
+  frameValid: boolean | null
+  frameError: string
   phase: string | null
   faultType: string | null
   faultDistanceM: number | null

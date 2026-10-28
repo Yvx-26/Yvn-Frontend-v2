@@ -10,10 +10,10 @@ defineProps<{
   <section class="line-situation-panel line-situation-event-panel">
     <header class="line-situation-panel-header">
       <div>
-        <strong>线路最新事件</strong>
+        <strong>线路当前异常</strong>
         <span>{{ line.name }}</span>
       </div>
-      <span>最近 24 小时</span>
+      <span>当前设备状态</span>
     </header>
 
     <div class="line-situation-event-list">

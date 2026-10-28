@@ -1,5 +1,5 @@
 .wave-monitor-page {
-  --wave-monitor-side-width: 286px;
+  --wave-monitor-side-width: 310px;
 
   position: relative;
   z-index: 1;
@@ -16,7 +16,7 @@
     0 10px 40px rgba(0, 0, 0, 0.1);
   font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', Arial, sans-serif;
   font-synthesis: none;
-  grid-template-rows: 84px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .wave-monitor-page::before {
@@ -28,89 +28,6 @@
     linear-gradient(rgba(54, 132, 177, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(54, 132, 177, 0.035) 1px, transparent 1px);
   background-size: 34px 34px;
-}
-
-.wave-monitor-summary {
-  position: relative;
-  z-index: 4;
-  display: grid;
-  min-width: 0;
-  background: linear-gradient(90deg, rgba(9, 38, 64, 0.98), rgba(7, 28, 48, 0.95));
-  border-bottom: 1px solid rgba(73, 164, 216, 0.18);
-  grid-template-columns:
-    minmax(320px, 1.45fr) repeat(3, minmax(118px, 0.72fr))
-    var(--wave-monitor-side-width);
-}
-
-.wave-monitor-summary-device,
-.wave-monitor-summary-item {
-  min-width: 0;
-  padding: 11px 15px;
-}
-
-.wave-monitor-summary-device {
-  box-shadow: inset 3px 0 0 #31d8f5;
-}
-
-.wave-monitor-summary-device > span,
-.wave-monitor-summary-item > span {
-  display: block;
-  color: #7f9aaf;
-  font-size: 12px;
-}
-
-.wave-monitor-summary-device > div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  margin-top: 3px;
-  gap: 7px;
-}
-
-.wave-monitor-summary-device strong {
-  overflow: hidden;
-  color: #f1f9fe;
-  font-size: 15px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wave-monitor-summary-device > small {
-  display: block;
-  overflow: hidden;
-  margin-top: 2px;
-  color: #7691a6;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wave-monitor-summary-item {
-  border-left: 1px solid rgba(73, 164, 216, 0.14);
-}
-
-.wave-monitor-summary-item > strong {
-  display: block;
-  overflow: hidden;
-  margin-top: 4px;
-  color: #f2f9fe;
-  font-family: Consolas, monospace;
-  font-size: 18px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wave-monitor-summary-item > strong.is-text {
-  font-size: 14px;
-}
-
-.wave-monitor-summary-item > strong small {
-  margin-left: 5px;
-  color: #819bad;
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .wave-monitor-state-dot {
@@ -164,7 +81,7 @@
 .wave-monitor-detail-panel {
   display: grid;
   border-left: 1px solid rgba(73, 164, 216, 0.2);
-  grid-template-rows: 52px auto minmax(0, 1fr);
+  grid-template-rows: 52px auto auto minmax(0, 1fr);
 }
 
 .wave-monitor-source-panel > header,
@@ -494,9 +411,16 @@
   filter: drop-shadow(0 0 4px rgba(49, 216, 245, 0.48));
 }
 
-.wave-monitor-trace.is-secondary {
-  opacity: 0.24;
-  filter: none;
+.wave-monitor-empty-chart {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: #93b4c9;
+  background: rgba(5, 23, 39, 0.88);
+  text-align: center;
 }
 
 .wave-monitor-cursor-line {
@@ -611,6 +535,46 @@
   font-size: 11px;
 }
 
+.wave-monitor-detail-source {
+  min-width: 0;
+  padding: 11px 12px;
+  background: linear-gradient(90deg, rgba(49, 216, 245, 0.065), transparent);
+  border-bottom: 1px solid rgba(73, 164, 216, 0.13);
+  box-shadow: inset 2px 0 0 rgba(49, 216, 245, 0.72);
+}
+
+.wave-monitor-detail-source > span,
+.wave-monitor-detail-source > small {
+  display: block;
+  overflow: hidden;
+  color: #7895aa;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wave-monitor-detail-source > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  margin: 5px 0 4px;
+  gap: 7px;
+}
+
+.wave-monitor-detail-source strong {
+  overflow: hidden;
+  color: #f0f8fd;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wave-monitor-detail-source > small + small {
+  margin-top: 3px;
+  color: #66869d;
+}
+
 .wave-monitor-trigger-summary {
   display: grid;
   padding: 10px 11px;
@@ -648,8 +612,10 @@
 
 .wave-monitor-event-section {
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   padding: 10px 11px;
+  scrollbar-color: rgba(49, 216, 245, 0.28) transparent;
+  scrollbar-width: thin;
 }
 
 .wave-monitor-event-section > strong {
@@ -721,46 +687,6 @@
   white-space: nowrap;
 }
 
-.wave-monitor-toast {
-  position: absolute;
-  z-index: 20;
-  right: 18px;
-  bottom: 18px;
-  display: flex;
-  min-height: 42px;
-  align-items: center;
-  padding: 0 13px;
-  color: #d4f8ff;
-  background: rgba(5, 35, 55, 0.96);
-  border: 1px solid rgba(49, 216, 245, 0.42);
-  border-radius: 6px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
-  font-size: 12px;
-  font-weight: 600;
-  gap: 7px;
-}
-
-.wave-monitor-toast i {
-  width: 7px;
-  height: 7px;
-  background: #31d8f5;
-  border-radius: 50%;
-  box-shadow: 0 0 7px #31d8f5;
-}
-
-.wave-monitor-toast-enter-active,
-.wave-monitor-toast-leave-active {
-  transition:
-    opacity 0.18s,
-    transform 0.18s;
-}
-
-.wave-monitor-toast-enter-from,
-.wave-monitor-toast-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
 @keyframes wave-monitor-pulse {
   0%,
   100% {
@@ -774,31 +700,21 @@
 
 @media (max-width: 1450px) {
   .wave-monitor-page {
-    --wave-monitor-side-width: 260px;
+    --wave-monitor-side-width: 280px;
   }
 
   .wave-monitor-layout {
     grid-template-columns: 225px minmax(490px, 1fr) var(--wave-monitor-side-width);
   }
-
-  .wave-monitor-summary {
-    grid-template-columns:
-      minmax(290px, 1.35fr) repeat(3, minmax(108px, 0.68fr))
-      var(--wave-monitor-side-width);
-  }
 }
 
 @media (max-width: 1180px) {
   .wave-monitor-page {
-    --wave-monitor-side-width: 238px;
+    --wave-monitor-side-width: 255px;
   }
 
   .wave-monitor-layout {
     grid-template-columns: 205px minmax(450px, 1fr) var(--wave-monitor-side-width);
-  }
-
-  .wave-monitor-summary-device > small {
-    display: none;
   }
 
   .wave-monitor-zoom-range {
@@ -807,16 +723,6 @@
 }
 
 @media (max-height: 820px) {
-  .wave-monitor-page {
-    grid-template-rows: 70px minmax(0, 1fr);
-  }
-
-  .wave-monitor-summary-device,
-  .wave-monitor-summary-item {
-    padding-top: 7px;
-    padding-bottom: 7px;
-  }
-
   .wave-monitor-source-panel {
     grid-template-rows: 46px 44px minmax(0, 1fr);
   }
@@ -826,7 +732,7 @@
   }
 
   .wave-monitor-detail-panel {
-    grid-template-rows: 46px auto minmax(0, 1fr);
+    grid-template-rows: 46px auto auto minmax(0, 1fr);
   }
 
   .wave-monitor-source-panel > header,
@@ -848,4 +754,64 @@
   .wave-monitor-live-state i {
     animation: none;
   }
+}
+
+.wave-monitor-wave-panel:fullscreen,
+.wave-monitor-wave-panel.is-fullscreen-fallback {
+  width: 100vw;
+  height: 100vh;
+  color: #eaf5fc;
+  background:
+    linear-gradient(rgba(54, 132, 177, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(54, 132, 177, 0.035) 1px, transparent 1px), #071a2d;
+  background-size: 34px 34px;
+  border: 1px solid rgba(66, 155, 214, 0.3);
+  border-radius: 0;
+  box-shadow: inset 0 0 90px rgba(0, 25, 54, 0.34);
+  grid-template-rows: 62px 52px minmax(300px, 1fr) 112px;
+}
+
+.wave-monitor-wave-panel.is-fullscreen-fallback {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+}
+
+.wave-monitor-wave-panel:fullscreen::backdrop {
+  background: #030d18;
+}
+
+.wave-monitor-wave-panel:fullscreen > header,
+.wave-monitor-wave-panel.is-fullscreen-fallback > header {
+  min-height: 62px;
+  padding-right: 20px;
+  padding-left: 20px;
+  background: rgba(7, 28, 48, 0.92);
+}
+
+.wave-monitor-wave-panel:fullscreen .wave-monitor-wave-toolbar,
+.wave-monitor-wave-panel.is-fullscreen-fallback .wave-monitor-wave-toolbar {
+  padding-right: 20px;
+  padding-left: 20px;
+  background: rgba(5, 24, 42, 0.82);
+}
+
+.wave-monitor-wave-panel:fullscreen .wave-monitor-chart-wrap,
+.wave-monitor-wave-panel.is-fullscreen-fallback .wave-monitor-chart-wrap {
+  margin: 14px 20px 10px;
+  border-color: rgba(49, 216, 245, 0.25);
+  box-shadow:
+    inset 0 0 46px rgba(0, 35, 67, 0.4),
+    0 0 24px rgba(0, 176, 224, 0.06);
+}
+
+.wave-monitor-wave-panel:fullscreen .wave-monitor-frame-stats,
+.wave-monitor-wave-panel.is-fullscreen-fallback .wave-monitor-frame-stats {
+  padding: 12px 20px 14px;
+  gap: 9px;
+}
+
+.wave-monitor-wave-panel:fullscreen .wave-monitor-frame-stats > button,
+.wave-monitor-wave-panel.is-fullscreen-fallback .wave-monitor-frame-stats > button {
+  padding: 9px 8px;
 }

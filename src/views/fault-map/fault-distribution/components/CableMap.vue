@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { loadAmap } from '../amap-loader'
+import { loadAmap } from '../../../../integrations/amap/loader'
+import { markerContent } from '../../../../integrations/amap/markers'
 import type {
   AMapMapInstance,
   AMapNamespace,
   AMapOverlay,
+} from '../../../../integrations/amap/types'
+import type {
   CableLine,
   LocatedFault,
   MapSelection,
   PositioningDevice,
-} from '../types'
+} from '../../../../domain/map/types'
 
 const props = defineProps<{
   lines: CableLine[]
@@ -28,22 +31,18 @@ const lineOverlays = new Map<string, AMapOverlay>()
 const lineDeviceOverlays = new Map<string, AMapOverlay[]>()
 const faultOverlays = new Map<string, AMapOverlay>()
 let map: AMapMapInstance | undefined
+let mapApi: AMapNamespace | undefined
+let disposed = false
 
 function createDeviceContent(device: PositioningDevice) {
-  const marker = document.createElement('button')
-  marker.type = 'button'
-  marker.className = `fault-map-device-marker is-${device.status}`
+  const marker = markerContent(`fault-map-device-marker is-${device.status}`, device.id)
   marker.setAttribute('aria-label', `${device.name}，${device.statusLabel}`)
-  marker.innerHTML = `<i></i><span>${device.id}</span>`
   return marker
 }
 
 function createFaultContent(fault: LocatedFault) {
-  const marker = document.createElement('button')
-  marker.type = 'button'
-  marker.className = 'fault-map-fault-marker'
+  const marker = markerContent('fault-map-fault-marker', fault.title, fault.distanceFromDevice)
   marker.setAttribute('aria-label', `故障点：${fault.title}`)
-  marker.innerHTML = `<i></i><span><strong>${fault.title}</strong><small>${fault.distanceFromDevice}</small></span>`
   return marker
 }
 
@@ -85,9 +84,7 @@ function createLineOverlays(AMap: AMapNamespace, line: CableLine) {
       offset: new AMap.Pixel(-10, -8),
       zIndex: 90,
     })
-    faultMarker.on('click', () =>
-      emit('select-item', { kind: 'fault', line, fault: line.fault! }),
-    )
+    faultMarker.on('click', () => emit('select-item', { kind: 'fault', line, fault: line.fault! }))
     faultOverlays.set(line.id, faultMarker)
   }
 
@@ -138,12 +135,21 @@ function focusAllLines() {
 
 async function initializeMap() {
   if (!mapContainer.value) return
+  isLoading.value = true
+  loadError.value = ''
+  map?.destroy()
+  map = undefined
+  lineOverlays.clear()
+  lineDeviceOverlays.clear()
+  faultOverlays.clear()
 
   try {
     const AMap = await loadAmap(
       import.meta.env.VITE_AMAP_KEY,
       import.meta.env.VITE_AMAP_SECURITY_CODE,
     )
+    if (disposed || !mapContainer.value) return
+    mapApi = AMap
     map = new AMap.Map(mapContainer.value, {
       center: [113.545, 34.818],
       zoom: 12,
@@ -153,8 +159,7 @@ async function initializeMap() {
       viewMode: '2D',
     })
 
-    const overlays = props.lines.flatMap((line) => createLineOverlays(AMap, line))
-    map.add(overlays)
+    updateOverlays()
     isLoading.value = false
     focusSelectedLine()
   } catch (error) {
@@ -163,10 +168,30 @@ async function initializeMap() {
   }
 }
 
+function updateOverlays() {
+  if (!map || !mapApi) return
+  const previous = [
+    ...lineOverlays.values(),
+    ...[...lineDeviceOverlays.values()].flat(),
+    ...faultOverlays.values(),
+  ]
+  if (previous.length) map.remove(previous)
+  lineOverlays.clear()
+  lineDeviceOverlays.clear()
+  faultOverlays.clear()
+  const overlays = props.lines.flatMap((line) => createLineOverlays(mapApi!, line))
+  if (overlays.length) map.add(overlays)
+}
+
 watch(() => props.selectedLineId, focusSelectedLine)
+watch(() => props.lines, updateOverlays, { deep: true })
 
 onMounted(initializeMap)
-onBeforeUnmount(() => map?.destroy())
+onBeforeUnmount(() => {
+  disposed = true
+  map?.destroy()
+  map = undefined
+})
 </script>
 
 <template>
@@ -180,7 +205,10 @@ onBeforeUnmount(() => map?.destroy())
 
     <div v-else-if="loadError" class="fault-map-error" role="alert">
       <svg><use href="#icon-warning" /></svg>
-      <div><strong>地图加载失败</strong><span>{{ loadError }}</span></div>
+      <div>
+        <strong>地图加载失败</strong><span>{{ loadError }}</span
+        ><button type="button" @click="initializeMap">重试</button>
+      </div>
     </div>
 
     <div class="fault-map-tools" aria-label="地图操作">

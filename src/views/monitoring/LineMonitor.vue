@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { fetchDashboardDevices, fetchLatestWaveform } from '../../services/telemetry-api'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { fetchLatestWaveform } from '../../services/telemetry-api'
+import { usePolling } from '../../composables/usePolling'
+import ModuleState from '../../components/common/ModuleState.vue'
 import { useInfrastructureStore } from '../../stores/infrastructure'
 import { waveformStatistics } from '../../utils/waveform'
 import LineBatchProgress from './line-monitor/components/LineBatchProgress.vue'
@@ -23,10 +25,8 @@ const latestLine = infrastructureStore.lines.slice().sort((left, right) => {
 const selectedLineId = ref(latestLine?.id ?? '')
 const selectedDeviceId = ref(latestLine?.devices[0]?.id ?? '')
 const isLive = ref(true)
-const currentTime = ref(new Date())
+const refreshedAt = ref<Record<string, Date>>({})
 const snapshotMessageVisible = ref(false)
-let refreshTimer: number | undefined
-let clockTimer: number | undefined
 let toastTimer: number | undefined
 
 function resolveStatus(line: (typeof infrastructureStore.lines)[number]): LineRuntimeStatus {
@@ -54,8 +54,7 @@ const lineViews = computed<LineMonitorLineView[]>(() =>
 )
 
 const currentLineView = computed(
-  () =>
-    lineViews.value.find((item) => item.line.id === selectedLineId.value) ?? lineViews.value[0]!,
+  () => lineViews.value.find((item) => item.line.id === selectedLineId.value) ?? lineViews.value[0],
 )
 
 const currentRuntime = computed<LineBatchRuntime>(
@@ -75,13 +74,14 @@ const currentRuntime = computed<LineBatchRuntime>(
     },
 )
 
-const timeText = computed(() =>
-  currentTime.value.toLocaleTimeString('zh-CN', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }),
+const timeText = computed(
+  () =>
+    refreshedAt.value[selectedLineId.value]?.toLocaleTimeString('zh-CN', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }) ?? '等待读取',
 )
 
 function selectLine(lineId: string) {
@@ -95,16 +95,26 @@ function toggleLive() {
   isLive.value = !isLive.value
 }
 
-async function refreshLineData() {
-  if (!isLive.value) return
-  infrastructureStore.applyRuntimeStatus(await fetchDashboardDevices())
+async function refreshLineData(signal: AbortSignal) {
   await Promise.all(
-    infrastructureStore.lines.map(async (line) => {
-      const monitor = line.devices.find((device) => device.category !== 'locator')
-      if (!monitor) return
-      try {
-        const frame = await fetchLatestWaveform(monitor.id)
-        const samples = frame.waveform_samples ?? []
+    infrastructureStore.lines
+      .filter((line) => line.id === selectedLineId.value)
+      .map(async (line) => {
+        const candidates = infrastructureStore.devices.filter(
+          (device) => device.lineId === line.id && device.enabled && device.category !== 'locator',
+        )
+        const monitor =
+          infrastructureStore.runtimeDevices
+            .map((status) => candidates.find((device) => device.id === status.imei))
+            .find(Boolean) ?? candidates[0]
+        if (!monitor) {
+          delete batchRuntime.value[line.id]
+          delete refreshedAt.value[line.id]
+          return
+        }
+        const frame = await fetchLatestWaveform(monitor.id, null, signal)
+        signal.throwIfAborted()
+        const samples = frame.frame_valid === false ? [] : (frame.waveform_samples ?? [])
         const stats = waveformStatistics(samples)
         batchRuntime.value[line.id] = {
           lineId: line.id,
@@ -112,100 +122,146 @@ async function refreshLineData() {
           frameId: frame.frame_id ? `#FRAME-${frame.frame_id}` : '尚无监测帧',
           phase: frame.phase_pair ?? frame.cable ?? '--',
           ...stats,
-          primaryEvent: frame.frame_id
-            ? `${frame.created_at ?? '--'} · ${monitor.id} 波形帧入库完成`
-            : '尚未接收到监测数据',
+          frameError:
+            frame.frame_valid === false ? `帧校验失败：${frame.frame_error || '协议无效'}` : '',
+          primaryEvent:
+            frame.frame_valid === false
+              ? '最新波形帧未通过协议校验'
+              : frame.frame_id
+                ? `${frame.created_at ?? '--'} · ${monitor.id} 波形帧入库完成`
+                : '尚未接收到监测数据',
           secondaryEvent: `${monitor.id} · ${monitor.lastSeen || '暂无上报'}`,
         }
-      } catch {
-        // 保留上一次成功读取的真实结果。
-      }
-    }),
+        refreshedAt.value[line.id] = new Date()
+      }),
   )
 }
 
 function showSnapshotMessage() {
+  const current = currentLineView.value
+  if (!current) return
+  const snapshot = {
+    capturedAt: new Date().toISOString(),
+    line: {
+      id: current.line.id,
+      name: current.line.name,
+      state: current.status,
+      devices: current.line.devices.map((device) => ({
+        id: device.id,
+        coordinate: device.coordinate,
+        state: device.state,
+        lastSeen: device.lastSeen,
+      })),
+    },
+    waveform: currentRuntime.value,
+  }
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }),
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `线路快照-${current.line.id.replace(/[^\w\u4e00-\u9fff-]/g, '_')}-${Date.now()}.json`
+  link.click()
+  URL.revokeObjectURL(url)
   snapshotMessageVisible.value = true
   if (toastTimer) window.clearTimeout(toastTimer)
   toastTimer = window.setTimeout(() => (snapshotMessageVisible.value = false), 1800)
 }
 
-onMounted(() => {
-  void refreshLineData()
-  refreshTimer = window.setInterval(() => void refreshLineData(), 10000)
-  clockTimer = window.setInterval(() => (currentTime.value = new Date()), 1000)
-})
-
 onBeforeUnmount(() => {
-  if (refreshTimer) window.clearInterval(refreshTimer)
-  if (clockTimer) window.clearInterval(clockTimer)
   if (toastTimer) window.clearTimeout(toastTimer)
 })
+const { refresh } = usePolling(
+  refreshLineData,
+  10000,
+  () => isLive.value && Boolean(currentLineView.value),
+)
+watch(selectedLineId, () => {
+  void refresh(true)
+})
+watch(
+  () => infrastructureStore.lines.map((line) => line.id).join('|'),
+  () => {
+    if (!infrastructureStore.lines.some((line) => line.id === selectedLineId.value))
+      selectLine(infrastructureStore.lines[0]?.id ?? '')
+  },
+)
 </script>
 
 <template>
   <section class="line-monitor-page" aria-label="线路监测">
-    <section class="line-monitor-summary" aria-label="当前线路摘要">
-      <div>
-        <i class="line-monitor-state-dot" :class="`is-${currentLineView.status}`"></i>
-        <strong>{{ currentLineView.line.name }}</strong>
-        <span>{{ currentLineView.statusText }}</span>
-      </div>
-      <div>
-        <span
-          >线路长度<strong>{{ currentLineView.line.lengthKm || '--' }} km</strong></span
-        >
-        <span
-          >定位点<strong>{{ currentLineView.line.devices.length }}</strong></span
-        >
-        <span>
-          在线设备
-          <strong
-            >{{ currentLineView.onlineCount }}/{{
-              currentLineView.line.devices.length || '--'
-            }}</strong
-          >
-        </span>
-        <span
-          >刷新时间<strong>{{ isLive ? timeText : '已暂停' }}</strong></span
-        >
-        <div class="monitor-panel-actions line-monitor-summary-actions" aria-label="线路监测操作">
-          <button type="button" @click="showSnapshotMessage">
-            <svg><use href="#icon-history" /></svg>历史快照
-          </button>
-          <button type="button" :class="{ 'is-live': isLive }" @click="toggleLive">
-            <span>{{ isLive ? 'Ⅱ' : '▶' }}</span
-            >{{ isLive ? '暂停刷新' : '继续刷新' }}
-          </button>
+    <ModuleState
+      v-if="!currentLineView"
+      title="暂无线路数据"
+      description="请在线路管理中建立线路并绑定定位设备。"
+    />
+    <template v-else>
+      <section class="line-monitor-summary" aria-label="当前线路摘要">
+        <div>
+          <i class="line-monitor-state-dot" :class="`is-${currentLineView.status}`"></i>
+          <strong>{{ currentLineView.line.name }}</strong>
+          <span>{{ currentLineView.statusText }}</span>
         </div>
-      </div>
-    </section>
+        <div>
+          <span
+            >线路长度<strong>{{ currentLineView.line.lengthKm || '--' }} km</strong></span
+          >
+          <span
+            >定位点<strong>{{ currentLineView.line.devices.length }}</strong></span
+          >
+          <span>
+            在线设备
+            <strong
+              >{{ currentLineView.onlineCount }}/{{
+                currentLineView.line.devices.length || '--'
+              }}</strong
+            >
+          </span>
+          <span
+            >刷新时间<strong>{{ isLive ? timeText : '已暂停' }}</strong></span
+          >
+          <div class="monitor-panel-actions line-monitor-summary-actions" aria-label="线路监测操作">
+            <button type="button" @click="showSnapshotMessage">
+              <svg><use href="#icon-history" /></svg>导出快照
+            </button>
+            <button type="button" :class="{ 'is-live': isLive }" @click="toggleLive">
+              <span>{{ isLive ? 'Ⅱ' : '▶' }}</span
+              >{{ isLive ? '暂停刷新' : '继续刷新' }}
+            </button>
+          </div>
+        </div>
+      </section>
 
-    <div class="line-monitor-layout">
-      <LineMonitorList :lines="lineViews" :selected-line-id="selectedLineId" @select="selectLine" />
-
-      <div class="line-monitor-center">
-        <LineMonitorMap
-          :line="currentLineView.line"
-          :status="currentLineView.status"
-          :selected-device-id="selectedDeviceId"
-          :is-live="isLive"
-          @select-device="selectedDeviceId = $event"
+      <div class="line-monitor-layout">
+        <LineMonitorList
+          :lines="lineViews"
+          :selected-line-id="selectedLineId"
+          @select="selectLine"
         />
-        <LineBatchProgress :runtime="currentRuntime" :is-live="isLive" />
-      </div>
 
-      <LineMonitorDevices
-        :devices="currentLineView.line.devices"
-        :selected-device-id="selectedDeviceId"
-        :runtime="currentRuntime"
-        @select="selectedDeviceId = $event"
-      />
-    </div>
+        <div class="line-monitor-center">
+          <LineMonitorMap
+            :line="currentLineView.line"
+            :status="currentLineView.status"
+            :selected-device-id="selectedDeviceId"
+            :is-live="isLive"
+            @select-device="selectedDeviceId = $event"
+          />
+          <LineBatchProgress :runtime="currentRuntime" :is-live="isLive" />
+        </div>
+
+        <LineMonitorDevices
+          :devices="currentLineView.line.devices"
+          :selected-device-id="selectedDeviceId"
+          :runtime="currentRuntime"
+          @select="selectedDeviceId = $event"
+        />
+      </div>
+    </template>
 
     <Transition name="line-monitor-toast">
       <div v-if="snapshotMessageVisible" class="line-monitor-toast" role="status">
-        <i></i>当前线路状态快照已记录
+        <i></i>当前线路状态快照已导出
       </div>
     </Transition>
   </section>

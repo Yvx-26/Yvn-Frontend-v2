@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BoundLineDevice, ManagedLine } from '../../../../domain/infrastructure/types'
+import type { ManagedLine } from '../../../../domain/infrastructure/types'
 import LineRouteMap from './LineRouteMap.vue'
 
 const line = defineModel<ManagedLine>({ required: true })
@@ -10,7 +10,6 @@ defineProps<{
 
 const emit = defineEmits<{
   'select-device': [deviceId: string]
-  'update-device': [device: BoundLineDevice]
 }>()
 </script>
 
@@ -18,7 +17,7 @@ const emit = defineEmits<{
   <section class="line-management-detail-panel">
     <nav aria-label="线路配置区域">
       <button type="button" class="is-active">基础信息与地图路径</button>
-      <button type="button">变更记录</button>
+      <button type="button" disabled title="变更记录尚未开放">变更记录（未开放）</button>
     </nav>
 
     <form class="line-management-form" @submit.prevent>
@@ -52,7 +51,6 @@ const emit = defineEmits<{
       :devices="line.devices"
       :selected-device-id="selectedDeviceId"
       @select-device="emit('select-device', $event)"
-      @update-device="emit('update-device', $event)"
     />
   </section>
 </template>

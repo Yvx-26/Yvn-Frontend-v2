@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ManagedDevice, ManagedLine } from '../../../../domain/infrastructure/types'
-import { loadAmap } from '../../../fault-map/fault-distribution/amap-loader'
+import { loadAmap } from '../../../../integrations/amap/loader'
 import type {
   AMapMapInstance,
   AMapNamespace,
   AMapOverlay,
-} from '../../../fault-map/fault-distribution/types'
+} from '../../../../integrations/amap/types'
 
 const props = defineProps<{
   device: ManagedDevice
@@ -71,7 +71,9 @@ async function initializeMap() {
       viewMode: '2D',
     })
 
-    const routeDevices = props.line?.devices.slice().sort((left, right) => left.sequence - right.sequence)
+    const routeDevices = props.line?.devices
+      .slice()
+      .sort((left, right) => left.sequence - right.sequence)
     if (routeDevices && routeDevices.length >= 2) {
       overlays.push(
         new AMapApi.Polyline({
@@ -136,14 +138,14 @@ onBeforeUnmount(() => {
     </div>
     <div v-else-if="loadError" class="device-config-map-error" role="alert">
       <svg><use href="#icon-warning" /></svg>
-      <div><strong>地图加载失败</strong><span>{{ loadError }}</span></div>
+      <div>
+        <strong>地图加载失败</strong><span>{{ loadError }}</span>
+      </div>
     </div>
 
     <div class="device-config-map-source">
       定位来源：{{
-        device.category === 'monitor'
-          ? locationDevice?.id || '未关联定位设备'
-          : '本机坐标'
+        device.category === 'monitor' ? locationDevice?.id || '未关联定位设备' : '本机坐标'
       }}
     </div>
     <button type="button" class="device-config-map-focus" @click="focusLocation">

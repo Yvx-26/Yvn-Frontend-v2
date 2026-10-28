@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './module-placeholder.css'
 withDefaults(
   defineProps<{
     title: string

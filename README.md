@@ -1,93 +1,97 @@
 # 电缆行波监测云平台前端
 
-本项目使用 Vue 3、TypeScript、Vite、Vue Router 和 Pinia。开发环境通过 Vite 将 `/api` 请求代理到 `http://127.0.0.1:8000`。
+面向电缆行波监测、设备管理和线路可视化的桌面 Web 前端，通过 HTTP API 与配套后端连接。
 
-## 启动与检查
+## 1. 技术框架
 
-```sh
-npm install
+| 技术                       | 用途                         |
+| -------------------------- | ---------------------------- |
+| Vue 3 + TypeScript         | 页面开发与类型约束           |
+| Vite                       | 开发服务与生产构建           |
+| Vue Router + Pinia         | 路由管理与全局状态管理       |
+| 高德地图 JS API + Three.js | 地理线路展示与 3D 拓扑       |
+| SVG + CSS                  | 波形曲线、界面布局和动态效果 |
+| Vitest + Vue Test Utils    | 单元与组件测试               |
+| ESLint + Oxlint + Prettier | 代码检查与格式化             |
+
+## 2. 运行环境配置
+
+- **Node.js**：满足 `^22.18.0 || >=24.12.0`。
+- **包管理器**：npm，保留 `package-lock.json`。
+- **浏览器**：支持 CSS 容器查询、Subgrid 和 WebGL 的现代桌面浏览器。
+- **后端**：需单独启动配套 API 服务；开发环境默认代理到 `http://127.0.0.1:8000`。
+
+首次运行时，将 `.env.example` 复制为 `.env.local`，填写以下配置；已有本机配置时不要覆盖。
+
+```dotenv
+VITE_API_BASE_URL=
+VITE_AMAP_KEY=your_amap_web_key
+VITE_AMAP_SECURITY_CODE=your_amap_security_code
 ```
 
-首次运行时复制环境变量模板，并在 `.env.local` 中填写高德地图配置。开发环境下
-`VITE_API_BASE_URL` 可以留空，前端会继续通过 Vite 代理访问本机后端；前后端
-分离部署时再填写后端完整地址。`.env.local` 仅保存在本机，不要提交到仓库。
+`VITE_API_BASE_URL` 留空时使用同源 `/api` 请求；前后端分离部署时填写后端源站地址，不添加 `/api` 后缀。修改环境变量后需重启开发服务或重新构建；真实配置不要提交到 GitHub。
 
-```powershell
-Copy-Item .env.example .env.local
-```
+在项目根目录安装依赖并启动：
 
 ```sh
+npm ci
 npm run dev
 ```
 
+访问终端打印的地址，通常为 `http://localhost:5173`。
+
+常用命令：
+
 ```sh
-npm run build
-npm run test:unit -- --run
-npx eslint src --no-cache
-npx oxlint src
+npm run build              # 类型检查并构建，产物位于 dist/
+npm run preview            # 本地预览构建产物
+npm run test:unit -- --run # 运行测试
 ```
 
-## 根目录说明
-
-| 目录或文件 | 作用 | 是否可直接删除 |
-| --- | --- | --- |
-| `src/` | 前端业务源码 | 不可删除 |
-| `public/` | 不经打包处理、直接复制到站点根目录的静态文件；当前保存网站图标 | 不可删除 |
-| `dist/` | `npm run build` 生成的生产部署文件 | 可以重新生成，但部署时需要 |
-| `node_modules/` | npm 安装的第三方依赖 | 可以通过 `npm install` 重新生成 |
-| `.vscode/` | VS Code 推荐插件和工作区设置 | 不影响生产运行 |
-| `index.html` | Vite 页面入口 | 不可删除 |
-| `package.json` | 依赖、启动、构建、测试和检查命令 | 不可删除 |
-| `package-lock.json` | 锁定依赖版本，保证不同电脑安装结果一致 | 建议保留 |
-| `vite.config.ts` | Vite 插件、路径别名和后端代理配置 | 不可删除 |
-| `vitest.config.ts` | 单元测试环境配置 | 需要运行测试时不可删除 |
-| `tsconfig*.json` | TypeScript、Vue 和测试类型检查配置 | 不可删除 |
-| `eslint.config.ts`、`.oxlintrc.json` | 代码质量检查配置 | 建议保留 |
-| `.prettierrc.json`、`.editorconfig` | 代码格式和编辑器风格配置 | 建议保留 |
-| `.env.example` | 可提交的环境变量模板，仅包含占位值 | 建议保留并上传 |
-| `.env.local` | 本机真实环境变量，可能包含地图配置 | 不可上传，已由 `.gitignore` 排除 |
-| `env.d.ts` | Vite/Vue 环境类型声明 | 不可删除 |
-
-## `src/` 目录说明
-
-| 目录或文件 | 作用 |
-| --- | --- |
-| `main.ts` | 创建 Vue 应用，注册 Pinia 和路由，初始化基础设施数据 |
-| `App.vue` | 应用根组件，承载路由出口 |
-| `assets/` | 全局样式等需要参与 Vite 打包的资源 |
-| `components/` | 多个页面共用的组件；`common/` 中包含未完成模块使用的统一占位组件 |
-| `config/` | 系统导航、菜单名称、图标和路由地址等静态配置 |
-| `domain/` | 跨页面共享的业务领域类型，例如设备、线路和绑定关系 |
-| `layouts/` | 页面整体框架，包括顶部导航、侧边栏和主内容区 |
-| `router/` | Vue Router 创建逻辑；`routes/` 保存平台全部页面路由 |
-| `services/` | 与后端通信的 API 封装及统一 HTTP 请求处理 |
-| `stores/` | Pinia 全局状态；当前主要维护线路、设备和绑定关系 |
-| `utils/` | 无页面状态的通用计算函数，例如波形统计 |
-| `views/` | 按导航模块划分的页面和页面专用组件 |
-| `__tests__/` | Vitest 单元测试，不会进入生产包 |
-| `components/IconSprite.vue` | 全站 SVG 图标定义，供页面通过图标 ID 复用 |
-
-## `src/views/` 页面目录说明
-
-| 目录 | 对应功能 |
-| --- | --- |
-| `overview/` | 首页总览：综合总览、运行态势、线路态势、设备态势和告警入口 |
-| `monitoring/` | 实时监测：线路监测、设备监测、行波监测，以及尚未接入业务的占位页 |
-| `fault-map/` | 故障地图：故障分布、线路拓扑、地图图层及尚未接入业务的占位页 |
-| `analysis/` | 智能解析模块；当前页面主要为后续业务预留的占位页 |
-| `warnings/` | 预警中心模块；当前页面主要为后续业务预留的占位页 |
-| `reports/` | 统计报表模块；当前页面主要为后续业务预留的占位页 |
-| `settings/` | 系统设置：线路管理、设备配置及其他预留管理页面 |
-
-页面规模较大时采用如下结构：
+## 3. 目录结构
 
 ```text
-页面入口.vue
-页面名/
-├─ components/   页面专用组件
-├─ types.ts      页面专用 TypeScript 类型
-├─ data.ts       仍在使用的静态配置或数据转换定义
-└─ 页面名.css    页面专用样式
+Frontend.v2/
+├─ public/                  静态资源
+├─ src/
+│  ├─ assets/               全局样式与资源
+│  ├─ components/           公共组件
+│  ├─ composables/          轮询等复用逻辑
+│  ├─ config/               导航配置
+│  ├─ domain/               设备、线路及地图业务模型
+│  ├─ integrations/amap/    高德地图 SDK 集成
+│  ├─ layouts/              平台整体布局
+│  ├─ router/               页面路由
+│  ├─ services/             HTTP 请求与后端接口
+│  ├─ stores/               全局业务状态
+│  ├─ utils/                波形转换等工具函数
+│  ├─ views/                业务页面
+│  │  ├─ overview/          首页总览
+│  │  ├─ monitoring/        实时监测
+│  │  ├─ fault-map/         故障地图与线路拓扑
+│  │  ├─ settings/          线路与设备配置
+│  │  └─ analysis/、warnings/、reports/  预留业务模块
+│  ├─ __tests__/            测试文件
+│  ├─ App.vue               根组件
+│  └─ main.ts               应用入口
+├─ .env.example             环境变量模板
+├─ index.html               页面入口
+├─ package.json             依赖与运行命令
+├─ package-lock.json        依赖锁文件
+├─ vite.config.ts           构建与开发代理配置
+└─ README.md                项目说明
 ```
 
-如果某个页面已经改用真实后端数据，旧的模拟 `data.ts` 不应继续保留；只有从页面入口或其组件能够追踪到引用的文件才属于有效业务代码。
+页面专用组件、类型和样式与对应页面共置；首页四页共用 `views/overview/overview-layout.css` 管理网格对齐。
+
+## 4. 已实现功能
+
+| 模块     | 已实现内容                                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------------- |
+| 首页总览 | 综合总览、运行态势、线路态势、设备态势；汇总指标、接收统计、节点状态、最新波形曲线及详情跳转                     |
+| 实时监测 | 线路、设备和行波监测；切换设备/相间、协议校验、波形采样值查看与前段缩放、全屏、暂停/继续刷新、线路 JSON 快照导出 |
+| 故障地图 | 地图线路绘制、节点交互、故障分布页面、2D/3D 线路拓扑、底图与图层切换及透明度调整                                 |
+| 系统设置 | 线路和设备档案新增/编辑、定位节点绑定与排序、监测终端关联定位设备、配置保存与近期在线状态检查                    |
+| 公共能力 | 导航切换、侧栏收展、平台全屏、请求取消、错误与空数据提示、桌面响应式布局                                         |
+
+说明：实时数据目前采用 HTTP 轮询，并非服务端推送；告警、智能解析、报表及账户权限等业务仍有预留页面。地图展示不代表已完成自动故障定位闭环，平台配置保存也不代表已向设备下发参数。正式部署前仍需处理已知依赖安全风险、统计口径问题并补齐访问控制。

@@ -8,6 +8,7 @@ const props = defineProps<{
 }>()
 
 const frameState = computed(() => {
+  if (props.runtime.frameError) return props.runtime.frameError
   if (props.runtime.pointCount === 0) return '等待监测数据'
   if (!props.isLive) return '实时刷新已暂停'
   return props.runtime.pointCount === 4000 ? '波形帧完整' : '波形帧不完整'

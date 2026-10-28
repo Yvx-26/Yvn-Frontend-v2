@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { WaveMonitorRuntime } from '../types'
+import { toSignedSample } from '../../../../utils/waveform'
 
 const props = defineProps<{
   runtime: WaveMonitorRuntime
@@ -14,9 +15,12 @@ const emit = defineEmits<{
 
 const chartContainer = ref<HTMLElement>()
 const cursorTip = ref<HTMLElement>()
+const wavePanel = ref<HTMLElement>()
 const chartWidth = ref(620)
 const chartHeight = ref(280)
 const cursorTipWidth = ref(240)
+const isNativeFullscreen = ref(false)
+const isFallbackFullscreen = ref(false)
 const zoomPointCounts = [4000, 2000, 1000, 500, 400, 300, 200]
 const zoomIndex = ref(0)
 const cursorSampleIndex = ref(0)
@@ -27,6 +31,7 @@ const margin = { top: 34, right: 24, bottom: 52, left: 58 }
 const plotWidth = computed(() => Math.max(180, chartWidth.value - margin.left - margin.right))
 const plotHeight = computed(() => Math.max(130, chartHeight.value - margin.top - margin.bottom))
 const sampleCount = computed(() => props.runtime.waveformSamples.length)
+const isFullscreen = computed(() => isNativeFullscreen.value || isFallbackFullscreen.value)
 const visiblePointCount = computed(() => {
   if (sampleCount.value === 0) return 0
   return Math.min(sampleCount.value, zoomPointCounts[zoomIndex.value] ?? 4000)
@@ -38,9 +43,7 @@ const cursorRatio = computed(() => {
   return Math.max(0, Math.min(1, (cursorSampleIndex.value - visibleStart.value) / span))
 })
 const visibleSamples = computed(() =>
-  props.runtime.waveformSamples
-    .slice(visibleStart.value, visibleEnd.value + 1)
-    .map((value) => (value > 127 ? value - 256 : value)),
+  props.runtime.waveformSamples.slice(visibleStart.value, visibleEnd.value + 1).map(toSignedSample),
 )
 const yScale = { min: -150, max: 150 }
 
@@ -84,7 +87,7 @@ function yToPixel(value: number) {
   return margin.top + ((yScale.max - value) / (yScale.max - yScale.min)) * plotHeight.value
 }
 
-function tracePath() {
+const tracePath = computed(() => {
   if (visibleSamples.value.length === 0) return ''
   return visibleSamples.value
     .map((value, index) => {
@@ -95,13 +98,11 @@ function tracePath() {
       return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
     })
     .join(' ')
-}
+})
 
 const cursorX = computed(() => xToPixel(cursorRatio.value))
 const cursorRawValue = computed(() => props.runtime.waveformSamples[cursorSampleIndex.value] ?? 0)
-const cursorValue = computed(() =>
-  cursorRawValue.value > 127 ? cursorRawValue.value - 256 : cursorRawValue.value,
-)
+const cursorValue = computed(() => toSignedSample(cursorRawValue.value))
 const cursorY = computed(() => yToPixel(cursorValue.value))
 const cursorTipLeft = computed(() => {
   const plotLeft = margin.left + 8
@@ -115,7 +116,8 @@ function updateSize() {
   const rect = chartContainer.value.getBoundingClientRect()
   chartWidth.value = Math.max(300, Math.round(rect.width))
   chartHeight.value = Math.max(255, Math.round(rect.height))
-  if (cursorTip.value) cursorTipWidth.value = Math.ceil(cursorTip.value.getBoundingClientRect().width)
+  if (cursorTip.value)
+    cursorTipWidth.value = Math.ceil(cursorTip.value.getBoundingClientRect().width)
 }
 
 function placeCursor(event: MouseEvent) {
@@ -140,6 +142,42 @@ function zoomOut() {
   zoomIndex.value = Math.max(0, zoomIndex.value - 1)
 }
 
+function handleFullscreenChange() {
+  isNativeFullscreen.value = document.fullscreenElement === wavePanel.value
+}
+
+function handleFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && isFallbackFullscreen.value) {
+    isFallbackFullscreen.value = false
+  }
+}
+
+async function toggleFullscreen() {
+  const panel = wavePanel.value
+  if (!panel) return
+
+  if (isNativeFullscreen.value) {
+    await document.exitFullscreen?.()
+    return
+  }
+
+  if (isFallbackFullscreen.value) {
+    isFallbackFullscreen.value = false
+    return
+  }
+
+  if (panel.requestFullscreen) {
+    try {
+      await panel.requestFullscreen()
+      return
+    } catch {
+      // 浏览器拒绝原生全屏时，仍以铺满视口的方式提供完整行波视图。
+    }
+  }
+
+  isFallbackFullscreen.value = true
+}
+
 watch(
   () => props.runtime.frameId,
   () => {
@@ -154,13 +192,23 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(updateSize)
   if (chartContainer.value) resizeObserver.observe(chartContainer.value)
   if (cursorTip.value) resizeObserver.observe(cursorTip.value)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  window.addEventListener('keydown', handleFullscreenKeydown)
 })
 
-onBeforeUnmount(() => resizeObserver?.disconnect())
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  window.removeEventListener('keydown', handleFullscreenKeydown)
+})
 </script>
 
 <template>
-  <section class="wave-monitor-wave-panel">
+  <section
+    ref="wavePanel"
+    class="wave-monitor-wave-panel"
+    :class="{ 'is-fullscreen-fallback': isFallbackFullscreen }"
+  >
     <header>
       <div>
         <strong>实时行波视图</strong>
@@ -203,6 +251,18 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
           @click="zoomIn"
         >
           <svg><use href="#icon-zoom-in" /></svg>
+        </button>
+        <button
+          type="button"
+          class="wave-monitor-fullscreen-button"
+          :aria-label="isFullscreen ? '退出实时行波全屏' : '全屏查看实时行波'"
+          :aria-pressed="isFullscreen"
+          :title="isFullscreen ? '退出全屏' : '全屏查看实时行波'"
+          @click="toggleFullscreen"
+        >
+          <svg>
+            <use :href="isFullscreen ? '#icon-exit-fullscreen' : '#icon-fullscreen'" />
+          </svg>
         </button>
       </div>
     </div>
@@ -287,7 +347,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
         >
           采样点
         </text>
-        <path class="wave-monitor-trace" :d="tracePath()" />
+        <path class="wave-monitor-trace" :d="tracePath" />
         <line
           class="wave-monitor-cursor-line"
           :x1="cursorX"
@@ -298,7 +358,15 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
         <circle class="wave-monitor-cursor-point" :cx="cursorX" :cy="cursorY" r="4" />
       </svg>
 
-      <div ref="cursorTip" class="wave-monitor-cursor-tip" :style="{ left: `${cursorTipLeft}px` }">
+      <div v-if="!sampleCount" class="wave-monitor-empty-chart" role="status">
+        {{ runtime.frameError || '等待波形数据' }}
+      </div>
+      <div
+        v-show="sampleCount"
+        ref="cursorTip"
+        class="wave-monitor-cursor-tip"
+        :style="{ left: `${cursorTipLeft}px` }"
+      >
         采样点 {{ cursorSampleIndex }} · 有符号值 {{ cursorValue }} · 原始字节 {{ cursorRawValue }}
       </div>
     </div>

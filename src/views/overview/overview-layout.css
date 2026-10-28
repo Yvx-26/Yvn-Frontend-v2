@@ -1,0 +1,159 @@
+/* Metric cards and content use identical tracks, including the space between tracks. */
+.overview-page-layout {
+  --overview-gap: 12px;
+  --overview-columns: repeat(4, minmax(0, 1fr));
+  --overview-rows: minmax(320px, 1.35fr) minmax(220px, 1fr);
+  --overview-header-height: 60px;
+  --overview-stack-height: 552px;
+  container: overview-page / inline-size;
+  scrollbar-gutter: stable;
+}
+
+.overview-page-layout .overview-metric-grid {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: var(--overview-columns);
+  gap: var(--overview-gap);
+  margin-bottom: var(--overview-gap);
+}
+
+.overview-page-layout .overview-content-grid {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: var(--overview-columns);
+  grid-template-rows: var(--overview-rows);
+  gap: var(--overview-gap);
+}
+
+.overview-content-grid > .overview-primary-region {
+  grid-column: 1 / 4;
+  grid-row: 1 / 3;
+}
+
+.overview-content-grid > .overview-secondary-region {
+  grid-column: 4;
+  grid-row: 1 / 3;
+}
+
+.overview-content-grid > .overview-list-region {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+
+.overview-content-grid > .overview-center-region {
+  grid-column: 2 / 4;
+  grid-row: 1 / 3;
+}
+
+/* Subgrid gives both columns the same horizontal panel boundaries. */
+.overview-content-grid > .overview-aligned-column {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: subgrid;
+  gap: var(--overview-gap);
+}
+
+.overview-page-layout
+  :is(
+    .overview-panel-header,
+    .overview-wave-header,
+    .operation-situation-panel-header,
+    .line-situation-panel-header,
+    .device-situation-panel-header
+  ) {
+  box-sizing: border-box;
+  height: var(--overview-header-height);
+  min-height: var(--overview-header-height);
+  flex: 0 0 var(--overview-header-height);
+  padding: 10px 14px;
+}
+
+/* The waveform already has an outer inset; its header should share the title's x position. */
+.overview-page-layout .overview-wave-header {
+  padding-right: 2px;
+  padding-left: 2px;
+}
+
+.overview-page-layout .overview-metric-grid > :is(.overview-metric-card, .shared-metric) {
+  height: 104px;
+  min-height: 104px;
+}
+
+.overview-page-layout
+  :is(.device-situation-detail, .line-situation-detail, .operation-situation-current-body) {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.overview-page-layout
+  :is(
+    .operation-situation-current-panel,
+    .line-situation-detail-panel,
+    .overview-side-column > .overview-panel
+  ) {
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-page-layout .line-situation-detail {
+  flex: 1;
+}
+
+.overview-page-layout :is(.overview-device-list, .overview-alarm-list) {
+  min-height: 0;
+  overflow: auto;
+}
+
+.overview-page-layout .operation-situation-current-body dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* The breakpoint follows the actual content width, including an expanded sidebar. */
+@container overview-page (max-width: 1319px) {
+  .overview-page-layout .overview-content-grid {
+    grid-template-rows: var(--overview-stack-height) auto;
+  }
+
+  .overview-content-grid > .overview-primary-region {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .overview-content-grid > .overview-list-region {
+    grid-row: 1;
+  }
+
+  .overview-content-grid > .overview-center-region {
+    grid-column: 2 / -1;
+    grid-row: 1;
+  }
+
+  .overview-content-grid > .overview-aligned-column.overview-primary-region {
+    grid-template-rows: var(--overview-rows);
+  }
+
+  .overview-content-grid > .overview-secondary-region {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(310px, auto);
+  }
+}
+
+@media (max-height: 820px) {
+  .overview-page-layout {
+    --overview-rows: minmax(320px, 1.35fr) minmax(190px, 1fr);
+    --overview-stack-height: 522px;
+  }
+
+  .overview-page-layout .overview-metric-grid > :is(.overview-metric-card, .shared-metric) {
+    height: 96px;
+    min-height: 96px;
+  }
+}

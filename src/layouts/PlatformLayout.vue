@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import IconSprite from '../components/IconSprite.vue'
+import ModuleState from '../components/common/ModuleState.vue'
+import { usePolling } from '../composables/usePolling'
 import { navigationItems } from '../config/navigation'
 import { fetchDashboardSummary } from '../services/telemetry-api'
 import { useInfrastructureStore } from '../stores/infrastructure'
@@ -9,6 +11,9 @@ import { useInfrastructureStore } from '../stores/infrastructure'
 const route = useRoute()
 const router = useRouter()
 const infrastructureStore = useInfrastructureStore()
+const { refresh: refreshInfrastructure } = usePolling((signal) =>
+  infrastructureStore.refreshRuntime(signal),
+)
 const alarmCount = ref(0)
 const topMenus = navigationItems
 const lastVisitedPathByTop = ref<Record<string, string>>(
@@ -70,6 +75,11 @@ function selectSideMenu(path: string) {
 function toggleNotice() {
   noticeOpen.value = !noticeOpen.value
   userMenuOpen.value = false
+}
+
+function showAlarms() {
+  noticeOpen.value = false
+  void router.push('/overview/alarms')
 }
 
 function toggleUserMenu() {
@@ -162,7 +172,8 @@ onBeforeUnmount(() => {
           <Transition name="popover">
             <div v-if="noticeOpen" class="popover notice-popover">
               <div class="popover-head">
-                <strong>未处理告警</strong><button type="button">全部查看</button>
+                <strong>未处理告警</strong
+                ><button type="button" @click="showAlarms">全部查看</button>
               </div>
               <div v-if="alarmCount === 0" class="notice-item">
                 <span></span>
@@ -187,15 +198,15 @@ onBeforeUnmount(() => {
           </button>
           <Transition name="popover">
             <div v-if="userMenuOpen" class="popover user-popover">
-              <button type="button">
-                <svg><use href="#icon-lock" /></svg>修改密码
+              <button type="button" disabled title="账户功能尚未开放">
+                <svg><use href="#icon-lock" /></svg>修改密码（未开放）
               </button>
-              <button type="button">
+              <button type="button" @click="toggleFullscreen">
                 <svg><use href="#icon-monitor" /></svg>切换大屏模式
               </button>
               <div class="menu-divider"></div>
-              <button type="button" class="logout">
-                <svg><use href="#icon-logout" /></svg>退出登录
+              <button type="button" class="logout" disabled title="账户功能尚未开放">
+                <svg><use href="#icon-logout" /></svg>退出登录（未开放）
               </button>
             </div>
           </Transition>
@@ -237,18 +248,32 @@ onBeforeUnmount(() => {
           <h2>{{ currentSideMenu?.label }}</h2>
         </div>
         <div class="workspace-header-controls">
-          <div class="connection-state">
+          <div
+            class="connection-state"
+            :class="{ 'is-disconnected': !infrastructureStore.backendConnected }"
+          >
             <i></i>{{ infrastructureStore.backendConnected ? '平台连接正常' : '平台连接异常' }}
           </div>
         </div>
       </div>
-      <RouterView />
+      <RouterView v-if="infrastructureStore.initialized" />
+      <ModuleState
+        v-else
+        :title="infrastructureStore.loading ? '正在加载平台资料' : '平台资料加载失败'"
+        :description="infrastructureStore.errorMessage || '正在读取线路和设备信息'"
+        action-label="重新连接"
+        :busy="infrastructureStore.loading"
+        @action="refreshInfrastructure()"
+      />
       <footer class="workspace-footer">
         <span
-          ><i class="green"></i
+          ><i
+            class="green"
+            :class="{ 'is-disconnected': !infrastructureStore.backendConnected }"
+          ></i
           >{{ infrastructureStore.backendConnected ? '云平台服务正常' : '云平台服务异常' }}</span
         ><span
-          ><i class="cyan"></i
+          ><i class="cyan" :class="{ 'is-disconnected': !infrastructureStore.backendConnected }"></i
           >{{ infrastructureStore.backendConnected ? '数据接口已连接' : '数据接口未连接' }}</span
         ><span>系统版本 V1.0.0</span>
       </footer>

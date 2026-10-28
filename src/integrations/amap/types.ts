@@ -1,53 +1,4 @@
 export type Coordinate = [number, number]
-export type DeviceMapStatus = 'online' | 'warning' | 'offline'
-export type CableLineStatus = 'normal' | 'warning' | 'fault'
-
-export interface PositioningDevice {
-  id: string
-  name: string
-  sequence: number
-  coordinate: Coordinate
-  status: DeviceMapStatus
-  statusLabel: string
-  latency: string
-  lastUpload: string
-}
-
-export interface LocatedFault {
-  id: string
-  title: string
-  level: 'critical' | 'warning'
-  coordinate: Coordinate
-  between: [string, string]
-  distanceFromDevice: string
-  occurredAt: string
-  locationStatus: string
-  confidence: string
-}
-
-export interface CableLine {
-  id: string
-  name: string
-  length: string
-  status: CableLineStatus
-  statusLabel: string
-  color: string
-  devices: PositioningDevice[]
-  fault?: LocatedFault
-}
-
-export type MapSelection =
-  | {
-      kind: 'fault'
-      line: CableLine
-      fault: LocatedFault
-    }
-  | {
-      kind: 'device'
-      line: CableLine
-      device: PositioningDevice
-    }
-  | null
 
 export interface AMapOverlay {
   on(eventName: string, handler: () => void): void
@@ -69,10 +20,7 @@ export interface AMapMapInstance {
 }
 
 export interface AMapNamespace {
-  Map: new (
-    container: HTMLElement,
-    options: Record<string, unknown>,
-  ) => AMapMapInstance
+  Map: new (container: HTMLElement, options: Record<string, unknown>) => AMapMapInstance
   Circle: new (options: Record<string, unknown>) => AMapOverlay
   Polyline: new (options: Record<string, unknown>) => AMapOverlay
   Marker: new (options: Record<string, unknown>) => AMapOverlay
@@ -87,8 +35,6 @@ declare global {
   interface Window {
     AMap?: AMapNamespace
     __initializeCableFaultMap?: () => void
-    _AMapSecurityConfig?: {
-      securityJsCode?: string
-    }
+    _AMapSecurityConfig?: { securityJsCode?: string }
   }
 }

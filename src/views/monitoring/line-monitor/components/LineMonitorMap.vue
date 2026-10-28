@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { BoundLineDevice, ManagedLine } from '../../../../domain/infrastructure/types'
-import { loadAmap } from '../../../fault-map/fault-distribution/amap-loader'
+import { loadAmap } from '../../../../integrations/amap/loader'
 import type {
   AMapMapInstance,
   AMapNamespace,
   AMapOverlay,
-} from '../../../fault-map/fault-distribution/types'
+} from '../../../../integrations/amap/types'
 import type { LineRuntimeStatus } from '../types'
 
 const props = defineProps<{
@@ -35,7 +35,7 @@ const orderedDevices = computed(() =>
 
 const lineSignature = computed(() =>
   orderedDevices.value
-    .map((device) => `${device.id}:${device.sequence}:${device.state}:${device.coordinate.join(',')}`)
+    .map((device) => `${device.id}:${device.sequence}:${device.coordinate.join(',')}`)
     .join('|'),
 )
 
@@ -83,6 +83,19 @@ function syncSelectedDevice() {
   markerElements.forEach((element, deviceId) => {
     element.classList.toggle('is-selected', deviceId === props.selectedDeviceId)
   })
+}
+
+function syncMarkers() {
+  orderedDevices.value.forEach((device) => {
+    const element = markerElements.get(device.id)
+    if (!element) return
+    element.classList.remove('is-online', 'is-offline', 'is-warning')
+    element.classList.add(`is-${device.state}`)
+    const position = element.querySelector('small')
+    if (position) position.textContent = device.position
+  })
+  if (orderedDevices.value.length >= 2)
+    overlays[1]?.setOptions({ strokeColor: props.status === 'warning' ? '#f5a623' : '#20d9f5' })
 }
 
 function syncLiveState() {
@@ -183,6 +196,7 @@ function focusLine() {
 watch(lineSignature, initializeMap)
 watch(() => props.selectedDeviceId, syncSelectedDevice)
 watch(() => props.isLive, syncLiveState)
+watch(() => [props.line.devices, props.status], syncMarkers, { deep: true })
 onMounted(initializeMap)
 onBeforeUnmount(() => {
   initializationId += 1
@@ -200,8 +214,12 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="line-monitor-map-tools">
-      <button type="button"><svg><use href="#icon-layers" /></svg>地图底图</button>
-      <button type="button" @click="focusLine"><svg><use href="#icon-crosshair" /></svg>线路全景</button>
+      <button type="button" disabled title="请在故障地图的地图图层页切换底图">
+        <svg><use href="#icon-layers" /></svg>地图底图
+      </button>
+      <button type="button" @click="focusLine">
+        <svg><use href="#icon-crosshair" /></svg>线路全景
+      </button>
     </div>
 
     <div v-if="isLoading" class="line-monitor-map-loading">
@@ -209,7 +227,10 @@ onBeforeUnmount(() => {
     </div>
     <div v-else-if="loadError" class="line-monitor-map-error" role="alert">
       <svg><use href="#icon-warning" /></svg>
-      <div><strong>地图加载失败</strong><span>{{ loadError }}</span></div>
+      <div>
+        <strong>地图加载失败</strong><span>{{ loadError }}</span
+        ><button type="button" @click="initializeMap">重试</button>
+      </div>
     </div>
 
     <div v-if="line.devices.length === 0 && !isLoading" class="line-monitor-map-empty">

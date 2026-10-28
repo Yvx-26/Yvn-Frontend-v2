@@ -10,6 +10,7 @@ export interface LineMonitorLineView {
 }
 
 export interface LineBatchRuntime {
+  frameError?: string
   lineId: string
   monitorDeviceId: string
   frameId: string

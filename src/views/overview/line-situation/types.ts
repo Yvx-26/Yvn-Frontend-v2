@@ -1,15 +1,6 @@
 export type LineStatus = 'normal' | 'warning' | 'fault'
 export type LineNodeStatus = 'normal' | 'warning' | 'fault' | 'offline'
 
-export interface LineMetric {
-  id: string
-  label: string
-  value: string
-  suffix: string
-  icon: string
-  tone: 'primary' | 'success' | 'warning' | 'danger'
-}
-
 export interface SituationLineNode {
   id: string
   deviceId: string
@@ -17,7 +8,6 @@ export interface SituationLineNode {
   statusLabel: string
   batchProgress: string
   lastUpload: string
-  left: string
 }
 
 export interface LineEvent {
@@ -38,7 +28,6 @@ export interface SituationLine {
   length: string
   health: number
   lastUpdate: string
-  notice: string
   nodes: SituationLineNode[]
   events: LineEvent[]
 }

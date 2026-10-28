@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CableLine } from '../types'
+import type { CableLine } from '../../../../domain/map/types'
 
 defineProps<{
   lines: CableLine[]

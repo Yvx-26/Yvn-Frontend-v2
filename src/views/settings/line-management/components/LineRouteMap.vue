@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { BoundLineDevice } from '../../../../domain/infrastructure/types'
-import { loadAmap } from '../../../fault-map/fault-distribution/amap-loader'
+import { loadAmap } from '../../../../integrations/amap/loader'
+import { markerContent } from '../../../../integrations/amap/markers'
 import type {
   AMapMapInstance,
   AMapNamespace,
   AMapOverlay,
-} from '../../../fault-map/fault-distribution/types'
+} from '../../../../integrations/amap/types'
 
 const props = defineProps<{
   devices: BoundLineDevice[]
@@ -15,7 +16,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-device': [deviceId: string]
-  'update-device': [device: BoundLineDevice]
 }>()
 
 const mapContainer = ref<HTMLElement>()
@@ -38,11 +38,16 @@ const deviceSignature = computed(() =>
 )
 
 function createDeviceContent(device: BoundLineDevice) {
-  const marker = document.createElement('button')
-  marker.type = 'button'
-  marker.className = `line-route-device-marker is-${device.state}`
-  marker.innerHTML = `<i>${String(device.sequence).padStart(2, '0')}</i><span><strong>${device.id}</strong><small>${device.position}</small></span>`
-  marker.setAttribute('aria-label', `第${device.sequence}个定位设备，${device.id}，${device.position}`)
+  const marker = markerContent(
+    `line-route-device-marker is-${device.state}`,
+    device.id,
+    device.position,
+  )
+  marker.querySelector('i')!.textContent = String(device.sequence).padStart(2, '0')
+  marker.setAttribute(
+    'aria-label',
+    `第${device.sequence}个定位设备，${device.id}，${device.position}`,
+  )
   markerElements.set(device.id, marker)
   return marker
 }
@@ -75,7 +80,9 @@ async function initializeMap() {
     )
     if (currentInitializationId !== initializationId || !mapContainer.value) return
 
-    const orderedDevices = props.devices.slice().sort((left, right) => left.sequence - right.sequence)
+    const orderedDevices = props.devices
+      .slice()
+      .sort((left, right) => left.sequence - right.sequence)
     const center = orderedDevices[0]?.coordinate ?? [113.545, 34.818]
     map = new AMapApi.Map(mapContainer.value, {
       center,
@@ -146,7 +153,9 @@ onBeforeUnmount(() => {
     </div>
     <div v-else-if="loadError" class="line-route-map-error" role="alert">
       <svg><use href="#icon-warning" /></svg>
-      <div><strong>地图加载失败</strong><span>{{ loadError }}</span></div>
+      <div>
+        <strong>地图加载失败</strong><span>{{ loadError }}</span>
+      </div>
     </div>
 
     <div v-if="devices.length < 2 && !isLoading" class="line-route-map-empty">
@@ -156,7 +165,9 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="line-route-map-tools">
-      <button type="button" @click="focusRoute"><svg><use href="#icon-crosshair" /></svg>线路全景</button>
+      <button type="button" @click="focusRoute">
+        <svg><use href="#icon-crosshair" /></svg>线路全景
+      </button>
     </div>
 
     <div class="line-route-map-coordinate">

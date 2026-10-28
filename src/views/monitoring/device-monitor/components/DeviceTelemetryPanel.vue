@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import type { ManagedDevice } from '../../../../domain/infrastructure/types'
 import type { DeviceMonitorRuntime } from '../types'
+import { useInfrastructureStore } from '../../../../stores/infrastructure'
+import { linkedMonitorText } from '../../../../domain/infrastructure/helpers'
 
 const props = defineProps<{
   device: ManagedDevice
@@ -30,13 +32,10 @@ const lastPoint = computed(
   () => chartPoints.value[chartPoints.value.length - 1] ?? { x: 500, y: 120 },
 )
 const isLocator = computed(() => props.device.category === 'locator')
-const linkedDeviceText = computed(() => {
-  if (props.device.category === 'monitor')
-    return `关联定位设备 ${props.device.linkedLocatorId || '--'}`
-  if (props.device.category === 'locator')
-    return `关联监测设备 ${props.device.id.replace('DW', 'JC')}`
-  return '监测与定位功能一体化'
-})
+const infrastructureStore = useInfrastructureStore()
+const linkedDeviceText = computed(() =>
+  linkedMonitorText(props.device, infrastructureStore.devices),
+)
 const frameStatistics = computed(() => [
   { id: 'phase', label: '当前相间', value: props.runtime.phase },
   { id: 'points', label: '采样点数', value: `${props.runtime.pointCount} / 4000` },
@@ -65,11 +64,19 @@ const frameStatistics = computed(() => [
       <div class="device-monitor-chart-section">
         <div class="device-monitor-section-title">
           <strong>通信延迟趋势</strong>
-          <span>最近 60 秒 · 单位 ms</span>
+          <span>最近 6 次有效读取 · 单位 ms</span>
         </div>
 
         <div class="device-monitor-chart">
-          <svg viewBox="0 0 520 205" preserveAspectRatio="none" aria-label="通信延迟趋势图">
+          <div v-if="!runtime.latencyHistory.length" class="device-monitor-empty-chart">
+            暂无通信延迟数据
+          </div>
+          <svg
+            v-else
+            viewBox="0 0 520 205"
+            preserveAspectRatio="none"
+            aria-label="通信延迟读取记录"
+          >
             <defs>
               <linearGradient id="device-monitor-area-gradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#31d8f5" stop-opacity="0.3" />
@@ -90,9 +97,8 @@ const frameStatistics = computed(() => [
               <text x="12" y="80">{{ Math.round(maxLatency * 0.66) }}</text>
               <text x="12" y="129">{{ Math.round(maxLatency * 0.33) }}</text>
               <text x="12" y="179">0</text>
-              <text x="42" y="197">-60</text>
-              <text x="264" y="197">-30</text>
-              <text x="493" y="197">0s</text>
+              <text x="42" y="197">较早</text>
+              <text x="493" y="197">最新</text>
             </g>
             <path class="device-monitor-chart-area" :d="areaPath" />
             <path class="device-monitor-chart-line" :d="linePath" />
@@ -104,9 +110,12 @@ const frameStatistics = computed(() => [
       <div class="device-monitor-quality-section">
         <div class="device-monitor-quality-card">
           <div>
-            <span>信号质量</span><strong>{{ runtime.signalQuality }}%</strong>
+            <span>信号质量</span
+            ><strong>{{
+              runtime.signalQuality == null ? '暂无数据' : `${runtime.signalQuality}%`
+            }}</strong>
           </div>
-          <i><span :style="{ width: `${runtime.signalQuality}%` }"></span></i>
+          <i><span :style="{ width: `${runtime.signalQuality ?? 0}%` }"></span></i>
         </div>
 
         <div class="device-monitor-quality-card">

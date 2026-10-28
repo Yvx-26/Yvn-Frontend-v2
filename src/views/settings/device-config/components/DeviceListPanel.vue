@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import type {
   ManagedDevice,
   ManagedDeviceCategory,
@@ -65,12 +65,6 @@ const filteredDevices = computed(() => {
 function lineName(lineId: string) {
   return props.lines.find((line) => line.id === lineId)?.name ?? '未绑定线路'
 }
-
-watch(filteredDevices, (devices) => {
-  if (devices.length && !devices.some((device) => device.id === props.selectedDeviceId)) {
-    emit('select', devices[0]!)
-  }
-})
 </script>
 
 <template>
@@ -91,7 +85,7 @@ watch(filteredDevices, (devices) => {
 
       <div class="device-config-filters" aria-label="设备类别筛选">
         <button
-          v-for="filter in (['all', 'monitor', 'locator', 'integrated'] as const)"
+          v-for="filter in ['all', 'monitor', 'locator', 'integrated'] as const"
           :key="filter"
           type="button"
           :class="{ 'is-active': activeFilter === filter }"
@@ -123,9 +117,7 @@ watch(filteredDevices, (devices) => {
         </span>
       </button>
 
-      <div v-if="filteredDevices.length === 0" class="device-config-list-empty">
-        未找到匹配设备
-      </div>
+      <div v-if="filteredDevices.length === 0" class="device-config-list-empty">未找到匹配设备</div>
     </div>
   </aside>
 </template>

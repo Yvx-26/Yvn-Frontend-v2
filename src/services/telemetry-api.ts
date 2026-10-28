@@ -24,6 +24,8 @@ export interface DashboardMapPoint {
   updated_at: string | null
   cable_key: string | null
   cable_name: string | null
+  online: boolean
+  age_seconds: number | null
 }
 
 export interface WaveformFrame {
@@ -70,24 +72,24 @@ export interface OperationDashboard {
   }>
 }
 
-export function fetchDashboardSummary() {
-  return apiRequest<DashboardSummary>('/api/dashboard/summary')
+export function fetchDashboardSummary(signal?: AbortSignal) {
+  return apiRequest<DashboardSummary>('/api/dashboard/summary', { signal })
 }
 
-export function fetchDashboardDevices() {
-  return apiRequest<DashboardDevice[]>('/api/dashboard/devices')
+export function fetchDashboardDevices(signal?: AbortSignal) {
+  return apiRequest<DashboardDevice[]>('/api/dashboard/devices', { signal })
 }
 
-export function fetchDashboardMap() {
-  return apiRequest<DashboardMapPoint[]>('/api/dashboard/map')
+export function fetchDashboardMap(signal?: AbortSignal) {
+  return apiRequest<DashboardMapPoint[]>('/api/dashboard/map', { signal })
 }
 
-export function fetchLatestWaveform(imei: string, phasePair?: string | null) {
+export function fetchLatestWaveform(imei: string, phasePair?: string | null, signal?: AbortSignal) {
   const query = new URLSearchParams({ imei })
   if (phasePair) query.set('phase_pair', phasePair)
-  return apiRequest<WaveformFrame>(`/api/dashboard/wave/latest?${query.toString()}`)
+  return apiRequest<WaveformFrame>(`/api/dashboard/wave/latest?${query.toString()}`, { signal })
 }
 
-export function fetchOperationDashboard() {
-  return apiRequest<OperationDashboard>('/api/dashboard/operation')
+export function fetchOperationDashboard(signal?: AbortSignal) {
+  return apiRequest<OperationDashboard>('/api/dashboard/operation', { signal })
 }

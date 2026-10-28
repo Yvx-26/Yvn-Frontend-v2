@@ -1,12 +1,3 @@
-export interface OperationMetric {
-  id: string
-  label: string
-  value: string
-  suffix: string
-  icon: string
-  tone: 'primary' | 'success'
-}
-
 export interface TrendPoint {
   label: string
   value: number
