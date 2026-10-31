@@ -114,7 +114,7 @@ describe('map data and lifecycle', () => {
       id: `L${index}`,
       name: 'line',
       color: '#00d8ff',
-      length: '1 km',
+      length: '1000 m',
       status: 'normal' as const,
       statusLabel: '正常',
       devices: [

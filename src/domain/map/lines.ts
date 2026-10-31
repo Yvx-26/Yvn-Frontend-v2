@@ -21,7 +21,7 @@ export function toCableLines(lines: ManagedLine[]): CableLine[] {
       return {
         id: line.id,
         name: line.name,
-        length: line.lengthKm ? `${line.lengthKm} km` : '--',
+        length: line.lengthM ? `${line.lengthM} m` : '--',
         status: warning ? 'warning' : 'normal',
         statusLabel: warning ? '设备状态异常' : '运行正常',
         color: lineColors[index % lineColors.length]!,

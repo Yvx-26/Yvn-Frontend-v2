@@ -38,8 +38,14 @@ const emit = defineEmits<{
         </select>
       </label>
       <label>
-        <span>线路长度（km）</span>
-        <input v-model.trim="line.lengthKm" inputmode="decimal" />
+        <span>线路长度（m）</span>
+        <input
+          :value="line.lengthM"
+          readonly
+          placeholder="待补全坐标"
+          title="按节点顺序自动计算地图连线估算长度"
+        />
+        <small>按节点坐标自动计算的连线估算长度</small>
       </label>
       <label class="is-wide">
         <span>线路说明</span>

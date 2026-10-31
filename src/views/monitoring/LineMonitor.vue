@@ -204,7 +204,7 @@ watch(
         </div>
         <div>
           <span
-            >线路长度<strong>{{ currentLineView.line.lengthKm || '--' }} km</strong></span
+            >线路长度<strong>{{ currentLineView.line.lengthM || '--' }} m</strong></span
           >
           <span
             >定位点<strong>{{ currentLineView.line.devices.length }}</strong></span

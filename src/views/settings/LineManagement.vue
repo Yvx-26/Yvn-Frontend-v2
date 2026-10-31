@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useInfrastructureStore } from '../../stores/infrastructure'
 import type { ManagedLine } from '../../domain/infrastructure/types'
+import { routeLengthMetres } from '../../domain/infrastructure/line-length'
 import {
   cloneDevice,
   cloneLine,
@@ -53,8 +54,8 @@ const isComplete = computed(
     Boolean(draft.value.id.trim()) &&
     Boolean(draft.value.name.trim()) &&
     !duplicateId.value &&
-    (!draft.value.lengthKm.trim() ||
-      (Number.isFinite(Number(draft.value.lengthKm)) && Number(draft.value.lengthKm) >= 0)),
+    (!draft.value.lengthM.trim() ||
+      (Number.isFinite(Number(draft.value.lengthM)) && Number(draft.value.lengthM) >= 0)),
 )
 
 function loadLine(line: ManagedLine) {
@@ -97,6 +98,8 @@ async function saveChanges() {
   draft.value.state = draft.value.devices.length < 2 ? 'draft' : 'enabled'
   try {
     await infrastructureStore.saveLine(draft.value, editingOriginalId.value || undefined)
+    const saved = infrastructureStore.lines.find((line) => line.id === draft.value.id)
+    if (saved) draft.value = cloneLine(saved)
     isCreating.value = false
     selectedLineId.value = draft.value.id
     editingOriginalId.value = draft.value.id
@@ -141,13 +144,28 @@ function moveDevice(deviceId: string, direction: -1 | 1) {
 }
 
 watch(
+  () =>
+    infrastructureStore.devices
+      .map((device) => `${device.id}:${device.coordinate.join(',')}`)
+      .join('|'),
+  () => {
+    const byId = new Map(infrastructureStore.devices.map((device) => [device.id, device]))
+    draft.value.devices.forEach((device) => {
+      const current = byId.get(device.id)
+      if (current) device.coordinate = [...current.coordinate]
+    })
+  },
+)
+
+watch(
   () => draft.value.devices,
   (devices) => {
+    draft.value.lengthM = routeLengthMetres(devices)
     if (devices.length && !devices.some((device) => device.id === selectedDeviceId.value)) {
       selectedDeviceId.value = devices[0]!.id
     }
   },
-  { deep: true },
+  { deep: true, immediate: true },
 )
 onBeforeUnmount(() => {
   if (toastTimer) window.clearTimeout(toastTimer)

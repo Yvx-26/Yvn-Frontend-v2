@@ -10,6 +10,7 @@ import {
   type DashboardMapPoint,
 } from '../services/telemetry-api'
 import { backendConnected } from '../services/connection'
+import { routeLengthMetres } from '../domain/infrastructure/line-length'
 import { isRequestCancelled } from '../services/http'
 
 interface Activity {
@@ -40,6 +41,7 @@ export const useInfrastructureStore = defineStore('infrastructure', () => {
       line.devices = line.devices
         .filter((item) => byId.has(item.id) && byId.get(item.id)?.lineId === line.id)
         .map((item) => ({ ...cloneDevice(byId.get(item.id)!), sequence: item.sequence }))
+      line.lengthM = routeLengthMetres(line.devices)
     })
   }
 

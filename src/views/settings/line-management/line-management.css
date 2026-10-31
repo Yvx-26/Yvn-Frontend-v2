@@ -409,6 +409,11 @@
   grid-column: 1 / -1;
 }
 
+.line-management-form label > small {
+  color: var(--text-muted, #7ca0b8);
+  font-size: 11px;
+}
+
 .line-management-form label > span {
   display: block;
   margin-bottom: 5px;

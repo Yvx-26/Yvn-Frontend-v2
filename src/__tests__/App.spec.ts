@@ -66,7 +66,7 @@ async function mountAt(path = '/overview/comprehensive', emptyWave = false) {
               id: 'LINE-A',
               name: '海缆 A 段',
               type: 'submarine',
-              lengthKm: '18.6',
+              lengthM: '18.6',
               description: '',
               state: 'enabled',
               updatedAt: '2026-09-22 15:40:00',

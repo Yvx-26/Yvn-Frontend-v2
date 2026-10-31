@@ -104,7 +104,7 @@ export function createLineDraft(id = ''): ManagedLine {
     id,
     name: '',
     type: 'land',
-    lengthKm: '',
+    lengthM: '',
     description: '',
     state: 'draft',
     updatedAt: '',

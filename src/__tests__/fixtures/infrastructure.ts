@@ -17,7 +17,7 @@ export function line(id = 'L1', devices: ManagedDevice[] = []): ManagedLine {
     name: id,
     type: 'land',
     state: devices.length ? 'enabled' : 'draft',
-    lengthKm: '1',
+    lengthM: '1',
     updatedAt: '',
     description: '',
     devices: devices.map((item, index) => ({ ...item, sequence: index + 1 })),

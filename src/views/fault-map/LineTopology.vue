@@ -32,7 +32,7 @@ const topologyLines = computed<TopologyLine[]>(() =>
     return {
       id: line.id,
       name: line.name,
-      length: line.lengthKm ? `${line.lengthKm} km` : '--',
+      length: line.lengthM ? `${line.lengthM} m` : '--',
       color: lineColors[lineIndex % lineColors.length]!,
       status: warning || !devices.length ? 'warning' : 'normal',
       statusLabel: !devices.length ? '待接入节点' : warning ? '存在离线或预警设备' : '运行正常',

@@ -60,7 +60,7 @@ export interface ManagedLine {
   id: string
   name: string
   type: ManagedLineType
-  lengthKm: string
+  lengthM: string
   description: string
   state: ManagedLineState
   updatedAt: string

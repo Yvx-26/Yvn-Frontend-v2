@@ -47,7 +47,7 @@ const situationLines = computed<SituationLine[]>(() =>
             : '正常',
       type:
         line.type === 'submarine' ? '海底电缆' : line.type === 'hybrid' ? '混合电缆' : '陆地电缆',
-      length: line.lengthKm ? `${line.lengthKm} km` : '--',
+      length: line.lengthM ? `${line.lengthM} m` : '--',
       health: line.devices.length ? Math.round((onlineCount / line.devices.length) * 100) : 0,
       lastUpdate: lastUpdate || '--',
       nodes: line.devices.map((device, index) => ({
