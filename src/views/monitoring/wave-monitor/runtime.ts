@@ -16,6 +16,7 @@ export function createWaveMonitorRuntimes(devices: ManagedDevice[]) {
         faultType: null,
         faultDistanceM: null,
         interphaseResults: {},
+        phaseStates: {},
         waveformSamples: [],
         events: [],
       }

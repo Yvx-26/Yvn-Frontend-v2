@@ -28,7 +28,16 @@ export interface DashboardMapPoint {
   age_seconds: number | null
 }
 
+export interface PhaseLatestState {
+  frame_id: number | null
+  created_at: string | null
+  frame_valid: boolean
+  frame_error: string | null
+  result: InterphaseFaultResult | null
+}
+
 export interface WaveformFrame {
+  phase_states?: Record<string, PhaseLatestState>
   frame_id: number | null
   imei: string
   cable?: string | null
@@ -84,10 +93,47 @@ export function fetchDashboardMap(signal?: AbortSignal) {
   return apiRequest<DashboardMapPoint[]>('/api/dashboard/map', { signal })
 }
 
-export function fetchLatestWaveform(imei: string, phasePair?: string | null, signal?: AbortSignal) {
+export function fetchLatestWaveform(
+  imei: string,
+  phasePair?: string | null,
+  signal?: AbortSignal,
+  includePhaseStates = false,
+) {
   const query = new URLSearchParams({ imei })
   if (phasePair) query.set('phase_pair', phasePair)
+  if (includePhaseStates) query.set('include_phase_states', 'true')
   return apiRequest<WaveformFrame>(`/api/dashboard/wave/latest?${query.toString()}`, { signal })
+}
+
+export interface WaveHistoryFrame {
+  ID: number
+  IMEI: string
+  CABLE: string
+  PAYLOAD_LEN: number
+  CREATED_AT: string | null
+  frame_valid: boolean
+  frame_error: string | null
+  fault_type: string | null
+  fault_distance_m: number | null
+}
+
+export function fetchWaveHistory(
+  imei: string,
+  phase: string,
+  beforeId: number | null,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({ imei, phase_pair: phase, limit: '30' })
+  if (beforeId !== null) query.set('before_id', String(beforeId))
+  return apiRequest<{ data: WaveHistoryFrame[]; next_before_id: number | null }>(
+    `/api/frames?${query}`,
+    { signal },
+  )
+}
+
+export function fetchHistoryWaveform(imei: string, frameId: number, signal?: AbortSignal) {
+  const query = new URLSearchParams({ imei, frame_id: String(frameId) })
+  return apiRequest<WaveformFrame>(`/api/waveform?${query}`, { signal })
 }
 
 export function fetchOperationDashboard(signal?: AbortSignal) {

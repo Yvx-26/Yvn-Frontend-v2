@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import type { WaveMonitorRuntime } from '../types'
 import { toSignedSample } from '../../../../utils/waveform'
 
@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectPhase: [phasePair: string]
+  scrollHistory: [delta: number]
 }>()
 
 const chartContainer = ref<HTMLElement>()
@@ -21,7 +22,12 @@ const chartHeight = ref(280)
 const cursorTipWidth = ref(240)
 const isNativeFullscreen = ref(false)
 const isFallbackFullscreen = ref(false)
-const zoomPointCounts = [4000, 2000, 1000, 500, 400, 300, 200]
+// 横纵轴共用同一个倍率；只变换视窗，不改变原始采样数据。
+const zoomFactors = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64]
+const clipId = `wave-plot-${useId()}`
+const viewport = ref({ xMin: 0, xMax: 3999, yMin: -150, yMax: 150 })
+const zoomAnchor = ref<{ x: number; y: number } | null>(null)
+let wheelDelta = 0
 const zoomIndex = ref(0)
 const cursorSampleIndex = ref(0)
 let resizeObserver: ResizeObserver | undefined
@@ -32,31 +38,34 @@ const plotWidth = computed(() => Math.max(180, chartWidth.value - margin.left - 
 const plotHeight = computed(() => Math.max(130, chartHeight.value - margin.top - margin.bottom))
 const sampleCount = computed(() => props.runtime.waveformSamples.length)
 const isFullscreen = computed(() => isNativeFullscreen.value || isFallbackFullscreen.value)
-const visiblePointCount = computed(() => {
-  if (sampleCount.value === 0) return 0
-  return Math.min(sampleCount.value, zoomPointCounts[zoomIndex.value] ?? 4000)
-})
-const visibleStart = computed(() => 0)
-const visibleEnd = computed(() => (visiblePointCount.value > 0 ? visiblePointCount.value - 1 : 0))
-const cursorRatio = computed(() => {
-  const span = Math.max(1, visibleEnd.value - visibleStart.value)
-  return Math.max(0, Math.min(1, (cursorSampleIndex.value - visibleStart.value) / span))
-})
-const visibleSamples = computed(() =>
-  props.runtime.waveformSamples.slice(visibleStart.value, visibleEnd.value + 1).map(toSignedSample),
+const visibleStart = computed(() => viewport.value.xMin)
+const visibleEnd = computed(() => viewport.value.xMax)
+const zoomFactor = computed(() => zoomFactors[zoomIndex.value] ?? 1)
+const cursorRatio = computed(
+  () =>
+    (cursorSampleIndex.value - visibleStart.value) /
+    Math.max(1, visibleEnd.value - visibleStart.value),
 )
-const yScale = { min: -150, max: 150 }
+const cursorVisible = computed(
+  () => sampleCount.value > 0 && cursorRatio.value >= 0 && cursorRatio.value <= 1,
+)
+
+function formatTick(value: number) {
+  return Number(value.toFixed(2)).toString()
+}
 
 const horizontalGrid = computed(() =>
   Array.from({ length: 7 }, (_, index) => ({
-    value: yScale.max - index * 50,
+    value: formatTick(
+      viewport.value.yMax - (index / 6) * (viewport.value.yMax - viewport.value.yMin),
+    ),
     y: margin.top + (index / 6) * plotHeight.value,
   })),
 )
 
 const verticalGrid = computed(() =>
   Array.from({ length: 6 }, (_, index) => ({
-    value: Math.round(visibleStart.value + (index / 5) * (visibleEnd.value - visibleStart.value)),
+    value: formatTick(visibleStart.value + (index / 5) * (visibleEnd.value - visibleStart.value)),
     x: margin.left + (index / 5) * plotWidth.value,
   })),
 )
@@ -69,35 +78,62 @@ const faultTypeLabels: Record<string, string> = {
 }
 const interphaseCards = computed(() =>
   phasePairOrder.map((phasePair) => {
-    const result = props.runtime.interphaseResults[phasePair]
+    const state = props.runtime.phaseStates[phasePair]
+    // 当前相间与主波形、右侧详情使用同一帧；其他相间仍各自取最新帧。
+    const isCurrentFrame = props.runtime.frameId !== null && props.runtime.phase === phasePair
+    const valid = isCurrentFrame ? props.runtime.frameValid === true : state?.frame_valid === true
+    const type = isCurrentFrame ? props.runtime.faultType : state?.result?.type
+    const distance = isCurrentFrame ? props.runtime.faultDistanceM : state?.result?.distance_m
+    const hasFrame = isCurrentFrame || state?.frame_id != null
     return {
       phasePair,
-      faultType: result ? (faultTypeLabels[result.type] ?? result.type) : '--',
-      distance: result?.distance_m == null ? '--' : `${result.distance_m} m`,
-      faultCode: result?.code,
+      isCurrentFrame,
+      faultType: valid
+        ? type
+          ? (faultTypeLabels[type] ?? type)
+          : '--'
+        : hasFrame
+          ? '帧无效'
+          : '暂无数据',
+      distance: valid && distance != null ? `${distance} m` : '--',
+      faultCode: valid ? (type === 'SHORT' ? 2 : type === 'OPEN' ? 1 : 0) : undefined,
     }
   }),
 )
+
+function scrollPhaseHistory(event: WheelEvent, phase: string) {
+  if (props.selectedPhasePair !== phase) return
+  event.preventDefault()
+  emit(
+    'scrollHistory',
+    (event.deltaY || event.deltaX) * (event.deltaMode === 1 ? 24 : event.deltaMode === 2 ? 300 : 1),
+  )
+}
 
 function xToPixel(ratio: number) {
   return margin.left + ratio * plotWidth.value
 }
 
 function yToPixel(value: number) {
-  return margin.top + ((yScale.max - value) / (yScale.max - yScale.min)) * plotHeight.value
+  return (
+    margin.top +
+    ((viewport.value.yMax - value) / (viewport.value.yMax - viewport.value.yMin)) * plotHeight.value
+  )
 }
 
 const tracePath = computed(() => {
-  if (visibleSamples.value.length === 0) return ''
-  return visibleSamples.value
-    .map((value, index) => {
-      const ratio =
-        visibleSamples.value.length === 1 ? 0 : index / (visibleSamples.value.length - 1)
-      const x = xToPixel(ratio)
-      const y = yToPixel(value)
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
-    })
-    .join(' ')
+  // 保留视窗边界外相邻一点，裁剪后的折线仍与原始采样位置准确对应。
+  const start = Math.max(0, Math.floor(visibleStart.value))
+  const end = Math.min(sampleCount.value - 1, Math.ceil(visibleEnd.value))
+  const path: string[] = []
+  for (let index = start; index <= end; index += 1) {
+    const value = toSignedSample(props.runtime.waveformSamples[index] ?? 0)
+    const x = xToPixel(
+      (index - visibleStart.value) / Math.max(1, visibleEnd.value - visibleStart.value),
+    )
+    path.push(`${index === start ? 'M' : 'L'} ${x.toFixed(2)} ${yToPixel(value).toFixed(2)}`)
+  }
+  return path.join(' ')
 })
 
 const cursorX = computed(() => xToPixel(cursorRatio.value))
@@ -120,26 +156,85 @@ function updateSize() {
     cursorTipWidth.value = Math.ceil(cursorTip.value.getBoundingClientRect().width)
 }
 
-function placeCursor(event: MouseEvent) {
-  if (!chartContainer.value) return
-  const rect = chartContainer.value.getBoundingClientRect()
-  const localX = event.clientX - rect.left
-  const ratio = Math.max(
+function positionInPlot(event: MouseEvent) {
+  const svg = chartContainer.value?.querySelector('svg')
+  if (!svg) return null
+  const rect = svg.getBoundingClientRect()
+  if (!rect.width || !rect.height) return null
+  // 用 SVG 实际尺寸换算，窗口变化及全屏后仍与 viewBox 坐标一致。
+  const x = ((event.clientX - rect.left) / rect.width) * chartWidth.value
+  const y = ((event.clientY - rect.top) / rect.height) * chartHeight.value
+  const rx = (x - margin.left) / plotWidth.value
+  const ry = (y - margin.top) / plotHeight.value
+  if (rx < 0 || rx > 1 || ry < 0 || ry > 1) return null
+  return { rx, ry }
+}
+
+function anchorAt(rx: number) {
+  const view = viewport.value
+  const x = Math.max(
     0,
-    Math.min(1, (localX - margin.left) / Math.max(1, rect.width - margin.left - margin.right)),
+    Math.min(sampleCount.value - 1, Math.round(view.xMin + rx * (view.xMax - view.xMin))),
   )
-  cursorSampleIndex.value = Math.round(
-    visibleStart.value + ratio * Math.max(0, visibleEnd.value - visibleStart.value),
-  )
+  // 缩放中心吸附到实际采样点，纵坐标以样本值为准。
+  return { x, y: toSignedSample(props.runtime.waveformSamples[x] ?? 0) }
+}
+
+function placeCursor(event: MouseEvent) {
+  const position = positionInPlot(event)
+  if (!position || !sampleCount.value) return
+  zoomAnchor.value = anchorAt(position.rx)
+  cursorSampleIndex.value = zoomAnchor.value.x
+  wheelDelta = 0
+}
+
+function resetZoom() {
+  zoomIndex.value = 0
+  viewport.value = { xMin: 0, xMax: Math.max(1, sampleCount.value - 1), yMin: -150, yMax: 150 }
+  zoomAnchor.value = null
+  cursorSampleIndex.value = 0
+  wheelDelta = 0
+}
+
+function setZoom(nextIndex: number) {
+  if (sampleCount.value < 2) return
+  const next = Math.max(0, Math.min(zoomFactors.length - 1, nextIndex))
+  if (next === zoomIndex.value) return
+  const anchor = zoomAnchor.value ?? anchorAt(0.5)
+  const factor = zoomFactors[next] ?? 1
+  const fullXSpan = sampleCount.value - 1
+  const xSpan = fullXSpan / factor
+  const ySpan = 300 / factor
+  // 局部视图以选中采样点为正中心，而不是固定其原来的屏幕比例。
+  // 边缘允许留白，避免靠近首尾的采样点因边界钳制而无法居中。
+  const xMin = next === 0 ? 0 : anchor.x - xSpan / 2
+  const yMin = next === 0 ? -150 : anchor.y - ySpan / 2
+  zoomIndex.value = next
+  viewport.value = { xMin, xMax: xMin + xSpan, yMin, yMax: yMin + ySpan }
+  zoomAnchor.value = anchor
+  cursorSampleIndex.value = anchor.x
 }
 
 function zoomIn() {
-  zoomIndex.value = Math.min(zoomPointCounts.length - 1, zoomIndex.value + 1)
-  cursorSampleIndex.value = Math.min(cursorSampleIndex.value, visibleEnd.value)
+  setZoom(zoomIndex.value + 1)
 }
 
 function zoomOut() {
-  zoomIndex.value = Math.max(0, zoomIndex.value - 1)
+  setZoom(zoomIndex.value - 1)
+}
+
+function handleWheel(event: WheelEvent) {
+  const position = positionInPlot(event)
+  if (!position || sampleCount.value < 2 || event.deltaY === 0) return
+  event.preventDefault()
+  if (!zoomAnchor.value) zoomAnchor.value = anchorAt(position.rx)
+  const delta =
+    event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? chartHeight.value : 1)
+  if (Math.sign(delta) !== Math.sign(wheelDelta)) wheelDelta = 0
+  wheelDelta += delta
+  if (Math.abs(wheelDelta) < 40) return
+  setZoom(zoomIndex.value + (wheelDelta < 0 ? 1 : -1))
+  wheelDelta = 0
 }
 
 function handleFullscreenChange() {
@@ -178,17 +273,11 @@ async function toggleFullscreen() {
   isFallbackFullscreen.value = true
 }
 
-watch(
-  () => props.runtime.frameId,
-  () => {
-    zoomIndex.value = 0
-    cursorSampleIndex.value = 0
-  },
-  { immediate: true },
-)
+watch(() => [props.runtime.frameId, sampleCount.value], resetZoom, { immediate: true })
 
 onMounted(() => {
   updateSize()
+  chartContainer.value?.addEventListener('wheel', handleWheel, { passive: false })
   resizeObserver = new ResizeObserver(updateSize)
   if (chartContainer.value) resizeObserver.observe(chartContainer.value)
   if (cursorTip.value) resizeObserver.observe(cursorTip.value)
@@ -197,6 +286,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  chartContainer.value?.removeEventListener('wheel', handleWheel)
   resizeObserver?.disconnect()
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   window.removeEventListener('keydown', handleFullscreenKeydown)
@@ -232,12 +322,13 @@ onBeforeUnmount(() => {
 
       <div class="wave-monitor-view-actions">
         <span class="wave-monitor-zoom-range">
-          采样点 {{ visibleStart }}–{{ visibleEnd }} / {{ sampleCount }}
+          采样点 {{ formatTick(visibleStart) }}–{{ formatTick(visibleEnd) }} / {{ sampleCount }} ·
+          {{ zoomFactor }}×
         </span>
         <button
           type="button"
           aria-label="缩小波形"
-          title="缩小，显示更多采样点"
+          title="将选中采样点居中，等比例缩小横纵坐标"
           :disabled="zoomIndex === 0"
           @click="zoomOut"
         >
@@ -246,11 +337,20 @@ onBeforeUnmount(() => {
         <button
           type="button"
           aria-label="放大波形"
-          title="减少显示的前段采样点"
-          :disabled="zoomIndex === zoomPointCounts.length - 1"
+          title="将选中采样点居中，等比例放大横纵坐标"
+          :disabled="sampleCount < 2 || zoomIndex === zoomFactors.length - 1"
           @click="zoomIn"
         >
           <svg><use href="#icon-zoom-in" /></svg>
+        </button>
+        <button
+          type="button"
+          aria-label="重置波形缩放"
+          title="恢复完整波形和坐标范围（也可双击图形）"
+          :disabled="zoomIndex === 0"
+          @click="resetZoom"
+        >
+          ↺
         </button>
         <button
           type="button"
@@ -267,7 +367,13 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div ref="chartContainer" class="wave-monitor-chart-wrap" @click="placeCursor">
+    <div
+      ref="chartContainer"
+      class="wave-monitor-chart-wrap"
+      title="点击选中采样点，滚轮缩放时将该点移至中心，双击复位"
+      @click="placeCursor"
+      @dblclick="resetZoom"
+    >
       <svg
         class="wave-monitor-wave-svg"
         :viewBox="`0 0 ${chartWidth} ${chartHeight}`"
@@ -276,10 +382,15 @@ onBeforeUnmount(() => {
       >
         <title>实时行波幅值曲线</title>
         <desc>
-          横轴为采样点序号；纵轴为原始字节经过有符号转换后的采样值，范围固定为负 150 到正
-          150。点击波形区域可移动测量游标，使用加减按钮可切换前段采样点数量。
+          横轴为原始采样点序号，纵轴为原始字节转换后的有符号采样值。点击选择缩放中心，
+          使用滚轮或加减按钮将选中采样点居中，并等比例缩放横纵坐标；双击或点击复位恢复完整视图。
         </desc>
 
+        <defs>
+          <clipPath :id="clipId">
+            <rect :x="margin.left" :y="margin.top" :width="plotWidth" :height="plotHeight" />
+          </clipPath>
+        </defs>
         <g>
           <line
             v-for="item in horizontalGrid"
@@ -347,22 +458,24 @@ onBeforeUnmount(() => {
         >
           采样点
         </text>
-        <path class="wave-monitor-trace" :d="tracePath" />
-        <line
-          class="wave-monitor-cursor-line"
-          :x1="cursorX"
-          :y1="margin.top"
-          :x2="cursorX"
-          :y2="chartHeight - margin.bottom"
-        />
-        <circle class="wave-monitor-cursor-point" :cx="cursorX" :cy="cursorY" r="4" />
+        <g :clip-path="`url(#${clipId})`">
+          <path class="wave-monitor-trace" :d="tracePath" />
+          <line
+            class="wave-monitor-cursor-line"
+            :x1="cursorX"
+            :y1="margin.top"
+            :x2="cursorX"
+            :y2="chartHeight - margin.bottom"
+          />
+          <circle class="wave-monitor-cursor-point" :cx="cursorX" :cy="cursorY" r="4" />
+        </g>
       </svg>
 
       <div v-if="!sampleCount" class="wave-monitor-empty-chart" role="status">
         {{ runtime.frameError || '等待波形数据' }}
       </div>
       <div
-        v-show="sampleCount"
+        v-show="cursorVisible"
         ref="cursorTip"
         class="wave-monitor-cursor-tip"
         :style="{ left: `${cursorTipLeft}px` }"
@@ -371,7 +484,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="wave-monitor-frame-stats" aria-label="十组相间故障结果">
+    <div class="wave-monitor-frame-stats" aria-label="各相间最新帧故障状态">
       <button
         v-for="item in interphaseCards"
         :key="item.phasePair"
@@ -382,13 +495,15 @@ onBeforeUnmount(() => {
           'is-fault': item.faultCode === 1 || item.faultCode === 2,
         }"
         :aria-pressed="item.phasePair === selectedPhasePair"
-        :title="`查看 ${item.phasePair} 相间最近一帧波形`"
         @click="emit('selectPhase', item.phasePair)"
+        @wheel="scrollPhaseHistory($event, item.phasePair)"
       >
         <span>{{ item.phasePair }}</span>
         <strong>{{ item.faultType }}</strong>
         <small>{{ item.distance }}</small>
+        <small>{{ item.isCurrentFrame ? '当前帧' : '最新帧' }}</small>
       </button>
     </div>
+    <slot name="history"></slot>
   </section>
 </template>

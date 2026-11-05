@@ -22,6 +22,7 @@ const runtime: WaveMonitorRuntime = {
   faultType: 'NORMAL',
   faultDistanceM: null,
   interphaseResults: {},
+  phaseStates: {},
   waveformSamples: [0, 1, 255],
   events: [],
 }

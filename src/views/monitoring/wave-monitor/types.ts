@@ -1,4 +1,4 @@
-import type { InterphaseFaultResult } from '../../../services/telemetry-api'
+import type { InterphaseFaultResult, PhaseLatestState } from '../../../services/telemetry-api'
 
 export type WaveSourceFilter = 'all' | 'warning'
 
@@ -20,6 +20,7 @@ export interface WaveMonitorRuntime {
   faultType: string | null
   faultDistanceM: number | null
   interphaseResults: Record<string, InterphaseFaultResult>
+  phaseStates: Record<string, PhaseLatestState>
   waveformSamples: number[]
   events: WaveMonitorEvent[]
 }

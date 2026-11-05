@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useInfrastructureStore } from '../../stores/infrastructure'
-import { fetchLatestWaveform } from '../../services/telemetry-api'
+import {
+  fetchLatestWaveform,
+  fetchWaveHistory,
+  fetchHistoryWaveform,
+  type WaveHistoryFrame,
+} from '../../services/telemetry-api'
+import { isRequestCancelled } from '../../services/http'
+import WaveHistoryStrip from './wave-monitor/components/WaveHistoryStrip.vue'
 import { usePolling } from '../../composables/usePolling'
 import { linkedMonitorText } from '../../domain/infrastructure/helpers'
 import ModuleState from '../../components/common/ModuleState.vue'
@@ -18,6 +25,52 @@ const runtimes = ref(createWaveMonitorRuntimes(infrastructureStore.devices))
 const selectedDeviceId = ref('')
 const selectedPhasePair = ref<string | null>(null)
 const isLive = ref(true)
+const historyStrip = ref<InstanceType<typeof WaveHistoryStrip>>()
+const historyOpen = ref(false)
+const historyFrameId = ref<number | null>(null)
+const historyFrames = ref<WaveHistoryFrame[]>([])
+const historyBeforeId = ref<number | null>(null)
+const historyHasMore = ref(false)
+const historyLoading = ref(false)
+const historyError = ref('')
+let historyController: AbortController | undefined
+let historyRevision = 0
+
+function resetHistory() {
+  historyRevision += 1
+  historyController?.abort()
+  historyFrames.value = []
+  historyBeforeId.value = null
+  historyHasMore.value = true
+  historyLoading.value = false
+  historyError.value = ''
+}
+async function loadMoreHistory() {
+  const device = selectedDeviceId.value,
+    phase = selectedPhasePair.value
+  if (!device || !phase || historyLoading.value || !historyHasMore.value) return
+  const revision = historyRevision
+  const controller = new AbortController()
+  historyController = controller
+  historyLoading.value = true
+  historyError.value = ''
+  try {
+    const page = await fetchWaveHistory(device, phase, historyBeforeId.value, controller.signal)
+    if (controller.signal.aborted || revision !== historyRevision) return
+    const ids = new Set(historyFrames.value.map((frame) => frame.ID))
+    historyFrames.value.push(...page.data.filter((frame) => !ids.has(frame.ID)))
+    historyBeforeId.value = page.next_before_id
+    historyHasMore.value = page.data.length > 0 && page.next_before_id !== null
+  } catch (cause) {
+    if (revision === historyRevision && !isRequestCancelled(cause))
+      historyError.value = cause instanceof Error ? cause.message : '历史列表读取失败'
+  } finally {
+    if (revision === historyRevision) historyLoading.value = false
+  }
+}
+onBeforeUnmount(() => {
+  historyController?.abort()
+})
 const monitorDevices = computed(() =>
   infrastructureStore.devices.filter((device) => device.enabled && device.category !== 'locator'),
 )
@@ -31,7 +84,7 @@ const currentRuntime = computed(() => runtimes.value[selectedDeviceId.value])
 const relationText = computed(() =>
   selectedDevice.value ? linkedMonitorText(selectedDevice.value, infrastructureStore.devices) : '',
 )
-const { refresh } = usePolling(
+const { refresh, error: waveformError } = usePolling(
   refreshWaveform,
   5000,
   () => isLive.value && Boolean(selectedDevice.value),
@@ -65,12 +118,42 @@ watch(
   },
 )
 
+watch([selectedDeviceId, selectedPhasePair], () => {
+  resetHistory()
+  if (selectedPhasePair.value) void loadMoreHistory()
+})
+
+async function selectHistoryFrame(frame: WaveHistoryFrame) {
+  if (frame.CABLE !== selectedPhasePair.value || frame.IMEI !== selectedDeviceId.value) return
+  isLive.value = false
+  historyFrameId.value = frame.ID
+  // 等待轮询的停用监听完成，再发起可取消的指定帧请求。
+  await nextTick()
+  void refresh(true)
+}
+function toggleLive() {
+  if (isLive.value) {
+    isLive.value = false
+    return
+  }
+  historyFrameId.value = null
+  isLive.value = true
+  // 回到最新数据时重新加载列表，使新接收的帧也可供选择。
+  resetHistory()
+  if (selectedPhasePair.value) void loadMoreHistory()
+}
+
 function selectDevice(deviceId: string) {
+  historyOpen.value = false
+  historyFrameId.value = null
   selectedDeviceId.value = deviceId
   selectedPhasePair.value = null
   void refresh(true)
 }
 function selectPhasePair(phasePair: string) {
+  historyOpen.value = true
+  if (phasePair === selectedPhasePair.value) return
+  historyFrameId.value = null
   selectedPhasePair.value = phasePair
   const runtime = currentRuntime.value
   if (runtime) {
@@ -87,14 +170,37 @@ function selectPhasePair(phasePair: string) {
   }
   void refresh(true)
 }
+async function browseHistory(delta: number) {
+  if (!selectedPhasePair.value) return
+  historyOpen.value = true
+  await nextTick()
+  historyStrip.value?.scrollHistory(delta)
+}
 async function refreshWaveform(signal: AbortSignal) {
   const runtime = currentRuntime.value
   const deviceId = selectedDeviceId.value
   const phase = selectedPhasePair.value
   if (!runtime || !deviceId) return
-  const frame = await fetchLatestWaveform(deviceId, phase, signal)
+  const requestedFrameId = historyFrameId.value
+  const frame =
+    requestedFrameId === null
+      ? await fetchLatestWaveform(deviceId, phase, signal, true)
+      : await fetchHistoryWaveform(deviceId, requestedFrameId, signal)
   signal.throwIfAborted()
-  if (deviceId !== selectedDeviceId.value || phase !== selectedPhasePair.value) return
+  if (
+    deviceId !== selectedDeviceId.value ||
+    phase !== selectedPhasePair.value ||
+    requestedFrameId !== historyFrameId.value
+  )
+    return
+  if (requestedFrameId !== null && frame.frame_id !== requestedFrameId)
+    throw new Error('该历史帧已不存在，请重新选择')
+  if (requestedFrameId !== null && frame.frame_valid !== false && frame.phase_pair !== phase)
+    throw new Error('历史帧的相间与当前选择不符')
+  // 其他相间可能更新，而当前选中相间的波形帧没有变化。
+  if (requestedFrameId === null) runtime.phaseStates = frame.phase_states ?? {}
+  // 指定历史帧成功返回后收起列表，重复选择当前帧也适用。
+  if (requestedFrameId !== null && frame.frame_valid !== false) historyOpen.value = false
   if (frame.frame_id === runtime.frameId && frame.frame_id !== null) return
   runtime.frameId = frame.frame_id
   runtime.frameValid = frame.frame_id === null ? null : frame.frame_valid !== false
@@ -111,7 +217,7 @@ async function refreshWaveform(signal: AbortSignal) {
   runtime.interphaseResults = runtime.frameValid ? (frame.interphase_results ?? {}) : {}
   runtime.batchId = frame.frame_id === null ? '暂无波形' : `#FRAME-${frame.frame_id}`
   runtime.receiveTime = frame.created_at?.split(' ')[1] ?? frame.created_at ?? '--'
-  if (frame.frame_id !== null) {
+  if (frame.frame_id !== null && requestedFrameId === null) {
     runtime.events.unshift({
       id: `${deviceId}-${frame.frame_id}`,
       level: runtime.frameValid ? 'normal' : 'warning',
@@ -145,12 +251,29 @@ async function refreshWaveform(signal: AbortSignal) {
         :is-live="isLive"
         :selected-phase-pair="selectedPhasePair"
         @select-phase="selectPhasePair"
+        @scroll-history="browseHistory"
       >
+        <template #history>
+          <WaveHistoryStrip
+            v-if="selectedPhasePair && historyOpen"
+            ref="historyStrip"
+            :key="`${selectedDeviceId}-${selectedPhasePair}`"
+            :phase="selectedPhasePair"
+            :frames="historyFrames"
+            :current-frame-id="currentRuntime.frameId"
+            :loading="historyLoading"
+            :has-more="historyHasMore"
+            :error="historyError"
+            :read-error="waveformError"
+            @select="selectHistoryFrame"
+            @more="loadMoreHistory"
+          />
+        </template>
         <template #actions>
           <div class="monitor-panel-actions" aria-label="行波监测操作">
-            <button type="button" :class="{ 'is-live': isLive }" @click="isLive = !isLive">
+            <button type="button" :class="{ 'is-live': isLive }" @click="toggleLive">
               <span>{{ isLive ? 'Ⅱ' : '▶' }}</span
-              >{{ isLive ? '暂停刷新' : '继续刷新' }}
+              >{{ isLive ? '暂停刷新' : historyFrameId !== null ? '返回实时' : '继续刷新' }}
             </button>
           </div>
         </template>
