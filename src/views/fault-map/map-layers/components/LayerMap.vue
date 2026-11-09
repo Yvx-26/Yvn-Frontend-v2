@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loadAmap } from '../../../../integrations/amap/loader'
-import { markerContent } from '../../../../integrations/amap/markers'
+import { markerContent, nodeMarkerContent } from '../../../../integrations/amap/markers'
+import { cableStroke, createCableLabelLayer } from '../../../../integrations/amap/cable-lines'
+import { cableLineStyles } from '../../../../domain/map/lines'
 import type {
   AMapMapInstance,
   AMapNamespace,
@@ -9,7 +11,6 @@ import type {
 } from '../../../../integrations/amap/types'
 import type {
   CableLine,
-  CableLineStatus,
   LocatedFault,
   PositioningDevice,
 } from '../../../../domain/map/types'
@@ -27,6 +28,19 @@ const mapContainer = ref<HTMLElement>()
 const isLoading = ref(true)
 const loadError = ref('')
 const lineOverlays = new Map<string, AMapOverlay>()
+let lineLabels: ReturnType<typeof createCableLabelLayer> | undefined
+const selectedLineId = ref('')
+const selectedDeviceId = ref('')
+const selectedLine = computed(() =>
+  props.layerVisibility.lines
+    ? props.lines.find((line) => line.id === selectedLineId.value && props.statusVisibility[line.status])
+    : undefined,
+)
+const selectedDevice = computed(() => {
+  if (!props.layerVisibility.devices) return undefined
+  const line = props.lines.find((line) => line.id === selectedLineId.value && props.statusVisibility[line.status])
+  return line?.devices.find((device) => device.id === selectedDeviceId.value)
+})
 const deviceOverlays = new Map<string, AMapOverlay[]>()
 const faultOverlays = new Map<string, AMapOverlay>()
 const warningAreaOverlays = new Map<string, AMapOverlay>()
@@ -36,16 +50,12 @@ let map: AMapMapInstance | undefined
 let AMapApi: AMapNamespace | undefined
 let disposed = false
 
-const lineColors: Record<CableLineStatus, string> = {
-  normal: '#22c55e',
-  warning: '#f5a623',
-  fault: '#ff5268',
-}
-
 function createDeviceContent(device: PositioningDevice) {
-  const marker = markerContent(`map-layer-device-marker is-${device.status}`, device.id)
-  marker.setAttribute('aria-label', `${device.name}，${device.statusLabel}`)
-  return marker
+  return nodeMarkerContent(
+    `map-layer-device-marker is-${device.status}`,
+    device.sequence,
+    `节点 ${device.sequence}，设备 ${device.id}，${device.statusLabel}`,
+  )
 }
 
 function createFaultContent(fault: LocatedFault) {
@@ -90,7 +100,7 @@ function applyLayerState() {
     const warningArea = warningAreaOverlays.get(line.id)
 
     setOverlayVisible(lineOverlay, props.layerVisibility.lines && statusEnabled)
-    lineOverlay?.setOptions({ strokeOpacity: opacity })
+    lineOverlay?.setOptions({ ...cableStroke(line.status, line.id === selectedLineId.value), strokeOpacity: opacity })
 
     devices.forEach((device) => {
       setOverlayVisible(device, props.layerVisibility.devices && statusEnabled)
@@ -109,6 +119,13 @@ function applyLayerState() {
       strokeOpacity: 0.8 * opacity,
     })
   })
+  const visible = props.layerVisibility.lines ? props.lines.filter((line) => props.statusVisibility[line.status]) : []
+  const ordered = visible.slice().sort((a, b) => Number(b.id === selectedLineId.value) - Number(a.id === selectedLineId.value))
+  lineLabels?.setRoutes(ordered.map((line) => ({
+    name: line.name,
+    statusLabel: line.statusLabel,
+    path: line.devices.slice().sort((a, b) => a.sequence - b.sequence).map((device) => device.coordinate),
+  })), opacity)
 
   setOverlayVisible(boundaryOverlay, props.layerVisibility.boundary)
   boundaryOverlay?.setOptions({ strokeOpacity: 0.7 * opacity })
@@ -119,27 +136,36 @@ function applyLayerState() {
 
 function createLineLayers(AMap: AMapNamespace, line: CableLine) {
   const orderedDevices = line.devices.slice().sort((left, right) => left.sequence - right.sequence)
-  const lineOverlay = new AMap.Polyline({
-    path: orderedDevices.map((device) => device.coordinate),
-    strokeColor: lineColors[line.status],
-    strokeOpacity: 0.85,
-    strokeWeight: 7,
-    lineJoin: 'round',
-    lineCap: 'round',
-    showDir: true,
-    zIndex: 42,
-  })
-  lineOverlays.set(line.id, lineOverlay)
+  const path = orderedDevices.map((device) => device.coordinate)
+  if (path.length >= 2) {
+    const lineOverlay = new AMap.Polyline({
+      path,
+      ...cableStroke(line.status, line.id === selectedLineId.value),
+      strokeOpacity: 0.85,
+      lineJoin: 'round',
+      lineCap: 'round',
+    })
+    lineOverlay.on('click', () => {
+      selectedDeviceId.value = ''
+      selectedLineId.value = line.id
+    })
+    lineOverlays.set(line.id, lineOverlay)
+  }
 
-  const devices = orderedDevices.map(
-    (device) =>
-      new AMap.Marker({
+  const devices = orderedDevices.map((device) => {
+    const content = createDeviceContent(device)
+    content.addEventListener('click', (event) => {
+      event.stopPropagation()
+      selectedLineId.value = line.id
+      selectedDeviceId.value = device.id
+    })
+    return new AMap.Marker({
         position: device.coordinate,
-        content: createDeviceContent(device),
+        content,
         anchor: 'center',
         zIndex: 62,
-      }),
-  )
+    })
+  })
   deviceOverlays.set(line.id, devices)
 
   if (line.fault) {
@@ -153,9 +179,9 @@ function createLineLayers(AMap: AMapNamespace, line: CableLine) {
     const warningArea = new AMap.Circle({
       center: line.fault.coordinate,
       radius: 2700,
-      fillColor: '#f5a623',
+      fillColor: cableLineStyles.warning.color,
       fillOpacity: 0.1,
-      strokeColor: '#f5a623',
+      strokeColor: cableLineStyles.warning.color,
       strokeOpacity: 0.8,
       strokeWeight: 2,
       strokeStyle: 'dashed',
@@ -171,9 +197,9 @@ function createLineLayers(AMap: AMapNamespace, line: CableLine) {
         new AMap.Circle({
           center: warningDevice.coordinate,
           radius: 1800,
-          fillColor: '#f5a623',
+          fillColor: cableLineStyles.warning.color,
           fillOpacity: 0.08,
-          strokeColor: '#f5a623',
+          strokeColor: cableLineStyles.warning.color,
           strokeOpacity: 0.72,
           strokeWeight: 2,
           strokeStyle: 'dashed',
@@ -184,17 +210,19 @@ function createLineLayers(AMap: AMapNamespace, line: CableLine) {
   }
 
   return [
-    lineOverlay,
+    lineOverlays.get(line.id),
     ...devices,
     ...(faultOverlays.has(line.id) ? [faultOverlays.get(line.id)!] : []),
     ...(warningAreaOverlays.has(line.id) ? [warningAreaOverlays.get(line.id)!] : []),
-  ]
+  ].filter((overlay): overlay is AMapOverlay => Boolean(overlay))
 }
 
 async function initializeMap() {
   if (!mapContainer.value) return
   isLoading.value = true
   loadError.value = ''
+  lineLabels?.destroy()
+  lineLabels = undefined
   map?.destroy()
   map = undefined
   lineOverlays.clear()
@@ -215,9 +243,10 @@ async function initializeMap() {
       showLabel: true,
       viewMode: '2D',
     })
+    lineLabels = createCableLabelLayer(map, mapContainer.value)
 
     rebuildLayers()
-    if (lineOverlays.size) map.setFitView([...lineOverlays.values()], false, [70, 300, 70, 300])
+    focusAllLines()
     applyBaseMap()
     applyLayerState()
     isLoading.value = false
@@ -270,13 +299,14 @@ function rebuildLayers() {
 }
 
 function focusAllLines() {
-  map?.setFitView([...lineOverlays.values()], false, [70, 300, 70, 300])
+  const overlays = [...lineOverlays.values(), ...[...deviceOverlays.values()].flat()]
+  if (overlays.length) map?.setFitView(overlays, false, [70, 300, 70, 300])
 }
 
 watch(() => props.baseMap, applyBaseMap)
 watch(() => props.lines, rebuildLayers, { deep: true })
 watch(
-  () => [props.layerVisibility, props.statusVisibility, props.overlayOpacity],
+  () => [props.layerVisibility, props.statusVisibility, props.overlayOpacity, selectedLineId.value],
   applyLayerState,
   { deep: true },
 )
@@ -284,6 +314,8 @@ watch(
 onMounted(initializeMap)
 onBeforeUnmount(() => {
   disposed = true
+  lineLabels?.destroy()
+  lineLabels = undefined
   map?.destroy()
   map = undefined
 })
@@ -312,6 +344,11 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div class="map-layer-map-note">线路由定位设备坐标按顺序生成</div>
+    <div class="map-layer-map-note" aria-live="polite">
+      <template v-if="selectedDevice">
+        节点 {{ selectedDevice.sequence }} · 设备 <span class="asset-identifier">{{ selectedDevice.id }}</span> · {{ selectedDevice.statusLabel }}
+      </template>
+      <template v-else>{{ selectedLine ? `${selectedLine.name} · ${selectedLine.statusDetail}` : '线路由定位设备坐标按顺序生成' }}</template>
+    </div>
   </div>
 </template>

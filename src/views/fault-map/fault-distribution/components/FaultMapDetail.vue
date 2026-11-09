@@ -16,7 +16,7 @@ defineEmits<{
     <header>
       <div>
         <strong>{{ selection.kind === 'fault' ? '故障定位详情' : '定位设备详情' }}</strong>
-        <span>{{ selection.line.name }}</span>
+        <span class="asset-label">{{ selection.line.name }}</span>
       </div>
       <button type="button" aria-label="关闭详情" @click="$emit('close')">×</button>
     </header>
@@ -67,7 +67,7 @@ defineEmits<{
       <div class="fault-detail-title">
         <div>
           <i :class="`is-${selection.device.status}`"></i
-          ><strong>{{ selection.device.name }}</strong>
+          ><strong class="asset-label">{{ selection.device.name }}</strong>
         </div>
         <span :class="`is-${selection.device.status}`">{{ selection.device.statusLabel }}</span>
       </div>
@@ -75,7 +75,7 @@ defineEmits<{
       <dl>
         <div>
           <dt>设备编号</dt>
-          <dd>{{ selection.device.id }}</dd>
+          <dd class="asset-identifier">{{ selection.device.id }}</dd>
         </div>
         <div>
           <dt>线路顺序</dt>

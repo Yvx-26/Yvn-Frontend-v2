@@ -85,8 +85,8 @@ watch(monitorDevices, (devices) => {
       >
         <i class="wave-monitor-state-dot" :class="`is-${device.state}`"></i>
         <span>
-          <strong>{{ device.id }}</strong>
-          <small>{{ lineName(device.lineId) }} · {{ device.position }}</small>
+          <strong class="asset-identifier asset-truncate" :title="device.id">{{ device.id }}</strong>
+          <small class="asset-truncate" :title="`${lineName(device.lineId)} · ${device.position}`">{{ lineName(device.lineId) }} · {{ device.position }}</small>
         </span>
         <em :class="`is-${device.state}`">{{ device.state === 'warning' ? '异常' : device.state === 'offline' ? '离线' : '在线' }}</em>
       </button>

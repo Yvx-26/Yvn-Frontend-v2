@@ -41,9 +41,9 @@ const faultDistanceText = computed(() =>
       <span>当前数据源</span>
       <div>
         <i class="wave-monitor-state-dot" :class="`is-${device.state}`"></i>
-        <strong>{{ device.name }}</strong>
+        <strong class="asset-label">{{ device.name }}</strong>
       </div>
-      <small>{{ lineName }} · {{ device.position }}</small>
+      <small class="asset-label">{{ lineName }} · {{ device.position }}</small>
       <small>{{ relationText }}</small>
     </section>
 

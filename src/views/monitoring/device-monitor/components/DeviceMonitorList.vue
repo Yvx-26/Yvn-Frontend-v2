@@ -125,8 +125,8 @@ watch(filteredDevices, (devices) => {
           </svg>
         </span>
         <span class="device-monitor-list-copy">
-          <strong>{{ device.id }}</strong>
-          <small>{{ categoryLabels[device.category] }} · {{ lineName(device.lineId) }}</small>
+          <strong class="asset-identifier asset-truncate" :title="device.id">{{ device.id }}</strong>
+          <small class="asset-truncate" :title="lineName(device.lineId)">{{ categoryLabels[device.category] }} · {{ lineName(device.lineId) }}</small>
         </span>
         <span class="device-monitor-list-state" :class="`is-${device.state}`">
           {{ stateLabels[device.state] }}

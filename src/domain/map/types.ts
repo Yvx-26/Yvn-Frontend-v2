@@ -1,7 +1,13 @@
 import type { InfrastructureCoordinate } from '../infrastructure/types'
 export type Coordinate = InfrastructureCoordinate
 export type DeviceMapStatus = 'online' | 'warning' | 'offline'
-export type CableLineStatus = 'normal' | 'warning' | 'fault'
+export type CableLineStatus = 'normal' | 'warning' | 'draft' | 'fault'
+
+export interface CableLineState {
+  status: CableLineStatus
+  statusLabel: string
+  statusDetail: string
+}
 
 export interface PositioningDevice {
   id: string
@@ -26,13 +32,10 @@ export interface LocatedFault {
   confidence: string
 }
 
-export interface CableLine {
+export interface CableLine extends CableLineState {
   id: string
   name: string
   length: string
-  status: CableLineStatus
-  statusLabel: string
-  color: string
   devices: PositioningDevice[]
   fault?: LocatedFault
 }

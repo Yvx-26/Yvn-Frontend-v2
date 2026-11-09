@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CableLineLegend from '../../../../components/common/CableLineLegend.vue'
 defineProps<{
   enabledLayerNames: string[]
   overlayOpacity: number
@@ -37,12 +38,7 @@ function updateOpacity(event: Event) {
 
     <section class="map-layer-summary-section">
       <h3>地图图例</h3>
-      <div class="map-layer-legend">
-        <span><i class="is-normal"></i>正常线路</span>
-        <span><i class="is-warning"></i>预警线路</span>
-        <span><i class="is-fault"></i>故障线路</span>
-        <span><i class="is-device"></i>定位设备</span>
-      </div>
+      <CableLineLegend />
     </section>
 
     <section class="map-layer-summary-section">

@@ -20,8 +20,8 @@ defineProps<{
       <article v-for="record in records" :key="record.id">
         <i :class="`is-${record.level}`" aria-hidden="true"></i>
         <div>
-          <strong>{{ record.title }}</strong>
-          <span>{{ record.detail }}</span>
+          <strong class="asset-label">{{ record.title }}</strong>
+          <span class="asset-label">{{ record.detail }}</span>
         </div>
         <time>{{ record.time }}</time>
       </article>

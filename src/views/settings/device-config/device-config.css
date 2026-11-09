@@ -808,7 +808,6 @@
   display: flex;
   align-items: center;
   flex-direction: column;
-  transform: translateY(16px);
 }
 
 .device-config-map-marker i {
@@ -833,15 +832,6 @@
 .device-config-map-marker.is-offline i {
   background: #71869a;
   box-shadow: 0 0 0 7px rgba(113, 134, 154, 0.12);
-}
-
-.device-config-map-marker span {
-  margin-top: 8px;
-  padding: 3px 6px;
-  color: #e7f7ff;
-  font-family: Consolas, monospace;
-  font-size: 12px;
-  background: rgba(7, 28, 48, 0.9);
 }
 
 .device-config-status-section {

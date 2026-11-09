@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ManagedDevice, ManagedLine } from '../../../../domain/infrastructure/types'
 import { loadAmap } from '../../../../integrations/amap/loader'
+import { cableStroke } from '../../../../integrations/amap/cable-lines'
 import type {
   AMapMapInstance,
   AMapNamespace,
@@ -34,10 +35,9 @@ const mapSignature = computed(() => {
 function createMarkerContent() {
   const wrapper = document.createElement('div')
   wrapper.className = `device-config-map-marker is-${locationSource.value.state}`
+  wrapper.title = `定位设备 ${locationSource.value.id}`
   const point = document.createElement('i')
-  const label = document.createElement('span')
-  label.textContent = locationSource.value.id
-  wrapper.append(point, label)
+  wrapper.append(point)
   return wrapper
 }
 
@@ -78,12 +78,11 @@ async function initializeMap() {
       overlays.push(
         new AMapApi.Polyline({
           path: routeDevices.map((device) => device.coordinate),
-          strokeColor: '#20d9f5',
+          ...cableStroke('draft'),
           strokeOpacity: 0.72,
           strokeWeight: 5,
           lineJoin: 'round',
           lineCap: 'round',
-          showDir: true,
           zIndex: 35,
         }),
       )
@@ -144,9 +143,11 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="device-config-map-source">
+      <template v-if="line && line.devices.length >= 2">路径预览 · </template>
       定位来源：{{
         device.category === 'monitor' ? locationDevice?.id || '未关联定位设备' : '本机坐标'
       }}
+      <span v-if="device.category !== 'monitor'" class="asset-identifier"> · {{ locationSource.id }}</span>
     </div>
     <button type="button" class="device-config-map-focus" @click="focusLocation">
       <svg><use href="#icon-crosshair" /></svg>重新定位

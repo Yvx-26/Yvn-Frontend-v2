@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loadAmap } from '../../../../integrations/amap/loader'
-import { markerContent } from '../../../../integrations/amap/markers'
+import { markerContent, nodeMarkerContent } from '../../../../integrations/amap/markers'
+import { cableStroke, createCableLabelLayer } from '../../../../integrations/amap/cable-lines'
 import type {
   AMapMapInstance,
   AMapNamespace,
@@ -28,6 +29,7 @@ const mapContainer = ref<HTMLElement>()
 const isLoading = ref(true)
 const loadError = ref('')
 const lineOverlays = new Map<string, AMapOverlay>()
+let lineLabels: ReturnType<typeof createCableLabelLayer> | undefined
 const lineDeviceOverlays = new Map<string, AMapOverlay[]>()
 const faultOverlays = new Map<string, AMapOverlay>()
 let map: AMapMapInstance | undefined
@@ -35,9 +37,11 @@ let mapApi: AMapNamespace | undefined
 let disposed = false
 
 function createDeviceContent(device: PositioningDevice) {
-  const marker = markerContent(`fault-map-device-marker is-${device.status}`, device.id)
-  marker.setAttribute('aria-label', `${device.name}，${device.statusLabel}`)
-  return marker
+  return nodeMarkerContent(
+    `fault-map-device-marker is-${device.status}`,
+    device.sequence,
+    `节点 ${device.sequence}，设备 ${device.id}，${device.statusLabel}`,
+  )
 }
 
 function createFaultContent(fault: LocatedFault) {
@@ -47,31 +51,31 @@ function createFaultContent(fault: LocatedFault) {
 }
 
 function createLineOverlays(AMap: AMapNamespace, line: CableLine) {
-  const polyline = new AMap.Polyline({
-    path: line.devices
-      .slice()
-      .sort((left, right) => left.sequence - right.sequence)
-      .map((device) => device.coordinate),
-    strokeColor: line.color,
-    strokeOpacity: 0.95,
-    strokeWeight: 6,
-    lineJoin: 'round',
-    lineCap: 'round',
-    showDir: true,
-    zIndex: 40,
-  })
-
-  polyline.on('click', () => emit('select-line', line))
-  lineOverlays.set(line.id, polyline)
+  const path = line.devices.slice().sort((a, b) => a.sequence - b.sequence).map((device) => device.coordinate)
+  if (path.length >= 2) {
+    const polyline = new AMap.Polyline({
+      path,
+      ...cableStroke(line.status, line.id === props.selectedLineId),
+      strokeOpacity: 0.95,
+      lineJoin: 'round',
+      lineCap: 'round',
+    })
+    polyline.on('click', () => emit('select-line', line))
+    lineOverlays.set(line.id, polyline)
+  }
 
   const devices = line.devices.map((device) => {
+    const content = createDeviceContent(device)
+    content.addEventListener('click', (event) => {
+      event.stopPropagation()
+      emit('select-item', { kind: 'device', line, device })
+    })
     const marker = new AMap.Marker({
       position: device.coordinate,
-      content: createDeviceContent(device),
+      content,
       anchor: 'center',
       zIndex: 60,
     })
-    marker.on('click', () => emit('select-item', { kind: 'device', line, device }))
     return marker
   })
   lineDeviceOverlays.set(line.id, devices)
@@ -88,23 +92,31 @@ function createLineOverlays(AMap: AMapNamespace, line: CableLine) {
     faultOverlays.set(line.id, faultMarker)
   }
 
-  return [polyline, ...devices, ...(line.fault ? [faultOverlays.get(line.id)!] : [])]
+  return [lineOverlays.get(line.id), ...devices, faultOverlays.get(line.id)]
+    .filter((overlay): overlay is AMapOverlay => Boolean(overlay))
+}
+
+function updateLineLabels() {
+  const selected = props.lines.find((line) => line.id === props.selectedLineId)
+  const ordered = selected ? [selected, ...props.lines.filter((line) => line !== selected)] : props.lines
+  lineLabels?.setRoutes(ordered.map((line) => ({
+    name: line.name,
+    statusLabel: line.statusLabel,
+    path: line.devices.slice().sort((a, b) => a.sequence - b.sequence).map((device) => device.coordinate),
+  })))
 }
 
 function focusSelectedLine() {
   if (!map) return
+  updateLineLabels()
 
   const activeLine = lineOverlays.get(props.selectedLineId)
   const activeDevices = lineDeviceOverlays.get(props.selectedLineId) ?? []
   const activeFault = faultOverlays.get(props.selectedLineId)
 
-  lineOverlays.forEach((overlay, lineId) => {
-    overlay.setOptions({
-      strokeOpacity: lineId === props.selectedLineId ? 0.98 : 0.25,
-      strokeWeight: lineId === props.selectedLineId ? 7 : 4,
-      zIndex: lineId === props.selectedLineId ? 45 : 35,
-    })
-  })
+  props.lines.forEach((line) =>
+    lineOverlays.get(line.id)?.setOptions(cableStroke(line.status, line.id === props.selectedLineId)),
+  )
 
   lineDeviceOverlays.forEach((overlays, lineId) => {
     overlays.forEach((overlay) =>
@@ -124,8 +136,7 @@ function focusSelectedLine() {
 
 function focusAllLines() {
   if (!map) return
-  const overlays = [...lineOverlays.values(), ...faultOverlays.values()]
-  lineOverlays.forEach((overlay) => overlay.setOptions({ strokeOpacity: 0.9, strokeWeight: 6 }))
+  const overlays = [...lineOverlays.values(), ...[...lineDeviceOverlays.values()].flat(), ...faultOverlays.values()]
   lineDeviceOverlays.forEach((devices) =>
     devices.forEach((overlay) => overlay.setOptions({ opacity: 1 })),
   )
@@ -137,6 +148,8 @@ async function initializeMap() {
   if (!mapContainer.value) return
   isLoading.value = true
   loadError.value = ''
+  lineLabels?.destroy()
+  lineLabels = undefined
   map?.destroy()
   map = undefined
   lineOverlays.clear()
@@ -158,6 +171,7 @@ async function initializeMap() {
       showLabel: true,
       viewMode: '2D',
     })
+    lineLabels = createCableLabelLayer(map, mapContainer.value)
 
     updateOverlays()
     isLoading.value = false
@@ -181,6 +195,7 @@ function updateOverlays() {
   faultOverlays.clear()
   const overlays = props.lines.flatMap((line) => createLineOverlays(mapApi!, line))
   if (overlays.length) map.add(overlays)
+  updateLineLabels()
 }
 
 watch(() => props.selectedLineId, focusSelectedLine)
@@ -189,6 +204,8 @@ watch(() => props.lines, updateOverlays, { deep: true })
 onMounted(initializeMap)
 onBeforeUnmount(() => {
   disposed = true
+  lineLabels?.destroy()
+  lineLabels = undefined
   map?.destroy()
   map = undefined
 })

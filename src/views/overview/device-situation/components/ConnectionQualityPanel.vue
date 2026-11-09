@@ -11,7 +11,7 @@ defineProps<{
     <header class="device-situation-panel-header">
       <div>
         <strong>当前通信状态</strong>
-        <span>{{ device.name }}</span>
+        <span class="asset-truncate" :title="device.name">{{ device.name }}</span>
       </div>
       <strong class="device-situation-quality-rate">{{ device.connectionRate }}</strong>
     </header>

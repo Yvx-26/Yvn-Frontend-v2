@@ -49,10 +49,10 @@ const emit = defineEmits<{
                 @click.stop="emit('select', device)"
               >
                 <i :class="`is-${device.status}`" aria-hidden="true"></i>
-                <span>{{ device.name }}</span>
+                <span class="asset-truncate" :title="`${device.name} · ${device.id}`">{{ device.name }}</span>
               </button>
             </td>
-            <td>{{ device.line }}</td>
+            <td class="asset-label" :title="device.line">{{ device.line }}</td>
             <td>{{ device.position }}</td>
             <td>
               <span class="device-situation-status" :class="`is-${device.status}`">

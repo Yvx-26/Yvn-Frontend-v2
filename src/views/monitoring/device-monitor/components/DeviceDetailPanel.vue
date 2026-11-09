@@ -39,10 +39,10 @@ const uploadModeLabels = {
       <span>当前监测对象</span>
       <div>
         <i class="device-monitor-state-dot" :class="`is-${device.state}`"></i>
-        <strong>{{ device.name }}</strong>
+        <strong class="asset-label">{{ device.name }}</strong>
         <em>{{ categoryLabels[device.category] }}</em>
       </div>
-      <small>{{ lineName }} · {{ device.position }}</small>
+      <small class="asset-label">{{ lineName }} · {{ device.position }}</small>
       <small>{{ relationText }}</small>
     </section>
 
@@ -97,7 +97,7 @@ const uploadModeLabels = {
 
     <div v-else class="device-monitor-config-list">
       <div>
-        <span>设备编号</span><strong>{{ device.id }}</strong>
+        <span>设备编号</span><strong class="asset-identifier">{{ device.id }}</strong>
       </div>
       <div>
         <span>设备类型</span><strong>{{ categoryLabels[device.category] }}</strong>

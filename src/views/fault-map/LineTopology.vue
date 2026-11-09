@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
-import { lineColors, deviceStateLabels } from '../../domain/infrastructure/helpers'
+import { deviceStateLabels } from '../../domain/infrastructure/helpers'
+import { resolveCableLineState } from '../../domain/map/lines'
+import CableLineLegend from '../../components/common/CableLineLegend.vue'
 import { useInfrastructureStore } from '../../stores/infrastructure'
 import LineTreePanel from './line-topology/components/LineTreePanel.vue'
 import TopologyCanvas from './line-topology/components/TopologyCanvas.vue'
@@ -13,7 +15,7 @@ const Topology3DScene = defineAsyncComponent(
   () => import('./line-topology/components/Topology3DScene.vue'),
 )
 const topologyLines = computed<TopologyLine[]>(() =>
-  infrastructureStore.lines.map((line, lineIndex) => {
+  infrastructureStore.lines.map((line) => {
     const ordered = line.devices.slice().sort((left, right) => left.sequence - right.sequence)
     const devices = ordered.map((device, index): TopologyDevice => ({
       id: device.id,
@@ -28,14 +30,11 @@ const topologyLines = computed<TopologyLine[]>(() =>
         Boolean(id),
       ),
     }))
-    const warning = devices.some((device) => device.status !== 'online')
     return {
       id: line.id,
       name: line.name,
       length: line.lengthM ? `${line.lengthM} m` : '--',
-      color: lineColors[lineIndex % lineColors.length]!,
-      status: warning || !devices.length ? 'warning' : 'normal',
-      statusLabel: !devices.length ? '待接入节点' : warning ? '存在离线或预警设备' : '运行正常',
+      ...resolveCableLineState(line, infrastructureStore.devices),
       devices,
     }
   }),
@@ -54,7 +53,8 @@ watch(
       .join('|'),
   () => {
     const lines = topologyLines.value
-    if (!lines.some((line) => line.id === focusMode.value)) setFocusMode('all')
+    if (focusMode.value !== 'all' && !lines.some((line) => line.id === focusMode.value)) setFocusMode('all')
+    if (!lines.some((line) => line.id === selectedLineId.value)) selectedLineId.value = 'all'
     if (!lines.some((line) => line.devices.some((device) => device.id === selectedDeviceId.value)))
       selectedDeviceId.value = lines[0]?.devices[0]?.id ?? ''
   },
@@ -74,16 +74,22 @@ const selectedLine = computed(() =>
 
 function selectLine(line: TopologyLine | null) {
   selectedLineId.value = line?.id ?? 'all'
-  focusMode.value = line ? (line.id as TopologyFocusMode) : 'all'
+  if (focusMode.value !== line?.id) focusMode.value = 'all'
+  if (line && !line.devices.some((device) => device.id === selectedDeviceId.value))
+    selectedDeviceId.value = line.devices[0]?.id ?? ''
 }
 
 function selectDevice(device: TopologyDevice) {
   selectedDeviceId.value = device.id
+  selectedLineId.value = topologyLines.value.find((line) => line.devices.some((item) => item.id === device.id))?.id ?? 'all'
 }
 
 function setFocusMode(mode: TopologyFocusMode) {
   focusMode.value = mode
   selectedLineId.value = mode
+  const line = topologyLines.value.find((item) => item.id === mode)
+  if (line && !line.devices.some((device) => device.id === selectedDeviceId.value))
+    selectedDeviceId.value = line.devices[0]?.id ?? ''
 }
 </script>
 
@@ -109,6 +115,7 @@ function setFocusMode(mode: TopologyFocusMode) {
             :key="line.id"
             type="button"
             :class="{ 'is-active': focusMode === line.id }"
+            :title="line.name"
             @click="setFocusMode(line.id)"
           >
             仅看{{ line.name }}
@@ -146,6 +153,7 @@ function setFocusMode(mode: TopologyFocusMode) {
         :key="sceneRevision"
         :lines="topologyLines"
         :focus-mode="focusMode"
+        :selected-line-id="selectedLineId"
         :selected-device-id="selectedDevice?.id ?? ''"
         @select-device="selectDevice"
         @select-line="selectLine"
@@ -156,6 +164,7 @@ function setFocusMode(mode: TopologyFocusMode) {
         v-else
         :lines="topologyLines"
         :focus-mode="focusMode"
+        :selected-line-id="selectedLineId"
         :selected-device-id="selectedDevice?.id ?? ''"
         @select-device="selectDevice"
         @select-line="selectLine"
@@ -169,6 +178,7 @@ function setFocusMode(mode: TopologyFocusMode) {
     </div>
 
     <footer class="line-topology-legend">
+      <CableLineLegend />
       <div>
         <span><i class="is-online"></i>设备在线</span>
         <span><i class="is-warning"></i>设备预警</span>

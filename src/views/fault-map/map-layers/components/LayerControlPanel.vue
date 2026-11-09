@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { activeCableStatuses, cableLineStyles } from '../../../../domain/map/lines'
 import type { CableLineStatus } from '../../../../domain/map/types'
 import { baseMapOptions, layerItems } from '../data'
 import type { BaseMapType, LayerVisibility, MapLayerKey, StatusVisibility } from '../types'
@@ -20,11 +21,6 @@ const enabledCount = computed(
   () => layerItems.filter((item) => props.layerVisibility[item.id]).length,
 )
 
-const statuses: { id: CableLineStatus; label: string }[] = [
-  { id: 'normal', label: '正常' },
-  { id: 'warning', label: '预警' },
-  { id: 'fault', label: '故障' },
-]
 </script>
 
 <template>
@@ -69,13 +65,14 @@ const statuses: { id: CableLineStatus; label: string }[] = [
     <section class="map-layer-control-section">
       <h3>线路状态筛选</h3>
       <div class="map-layer-status-options">
-        <label v-for="status in statuses" :key="status.id" :class="`is-${status.id}`">
+        <label v-for="status in activeCableStatuses" :key="status">
           <input
             type="checkbox"
-            :checked="statusVisibility[status.id]"
-            @change="emit('toggle-status', status.id)"
+            :style="{ accentColor: cableLineStyles[status].color }"
+            :checked="statusVisibility[status]"
+            @change="emit('toggle-status', status)"
           />
-          <span>{{ status.label }}</span>
+          <span>{{ cableLineStyles[status].label }}</span>
         </label>
       </div>
     </section>

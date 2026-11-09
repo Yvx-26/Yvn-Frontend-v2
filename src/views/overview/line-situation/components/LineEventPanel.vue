@@ -11,7 +11,7 @@ defineProps<{
     <header class="line-situation-panel-header">
       <div>
         <strong>线路当前异常</strong>
-        <span>{{ line.name }}</span>
+        <span class="asset-label">{{ line.name }}</span>
       </div>
       <span>当前设备状态</span>
     </header>

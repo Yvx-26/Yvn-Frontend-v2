@@ -37,7 +37,7 @@ function onlineNodeCount(line: SituationLine) {
       >
         <i :class="`is-${line.status}`" aria-hidden="true"></i>
         <span class="line-situation-list-copy">
-          <strong>{{ line.name }}</strong>
+          <strong class="asset-truncate" :title="line.name">{{ line.name }}</strong>
           <span>{{ line.nodes.length }} 个节点 · {{ onlineNodeCount(line) }} 在线</span>
         </span>
         <span class="line-situation-list-state" :class="`is-${line.status}`">

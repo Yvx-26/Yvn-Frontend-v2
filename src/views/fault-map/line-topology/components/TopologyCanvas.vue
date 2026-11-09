@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { cableLineStyles, cableSelectionOutline } from '../../../../domain/map/lines'
 import type { TopologyDevice, TopologyFocusMode, TopologyLine, TopologyNodeLayout } from '../types'
 
 const props = defineProps<{
   lines: TopologyLine[]
   focusMode: TopologyFocusMode
+  selectedLineId: string
   selectedDeviceId: string
 }>()
 
@@ -15,6 +17,13 @@ const emit = defineEmits<{
 
 const canvasHeight = computed(() => Math.max(610, props.lines.length * 180 + 70))
 const laneY = computed(() => props.lines.map((_, index) => 130 + index * 180))
+const planeSize = computed(() => {
+  const mostNodes = Math.max(1, ...props.lines.map((line) => line.devices.length))
+  return {
+    minWidth: `${Math.max(420, (mostNodes - 1) * 48)}px`,
+    minHeight: `${props.lines.length * 72}px`,
+  }
+})
 
 const nodeLayouts = computed<TopologyNodeLayout[]>(() =>
   props.lines.flatMap((line, lineIndex) => {
@@ -54,8 +63,8 @@ const lineLayouts = computed(() =>
     return {
       line,
       y: laneY.value[lineIndex]!,
-      startX: mainNodes[0]?.x ?? 110,
-      endX: mainNodes[mainNodes.length - 1]?.x ?? 890,
+      startX: mainNodes.length === 1 ? 350 : (mainNodes[0]?.x ?? 110),
+      endX: mainNodes.length === 1 ? 650 : (mainNodes[mainNodes.length - 1]?.x ?? 890),
       mainNodes,
       branches: branchNodes.map((branch) => ({
         branch,
@@ -93,73 +102,89 @@ function faultPath(line: TopologyLine) {
 
 <template>
   <section class="topology-canvas" aria-label="线路拓扑画布">
-    <svg
-      :viewBox="`0 0 1000 ${canvasHeight}`"
-      preserveAspectRatio="none"
-      role="img"
-      aria-label="电缆线路及定位设备连接拓扑"
-    >
-      <g
-        v-for="layout in lineLayouts"
-        :key="layout.line.id"
-        class="topology-line-group"
-        :class="{ 'is-dimmed': isLineDimmed(layout.line.id) }"
-        @click="emit('select-line', layout.line)"
+    <div class="topology-canvas-plane" :style="planeSize">
+      <svg
+        :viewBox="`0 0 1000 ${canvasHeight}`"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="电缆线路及定位设备连接拓扑"
       >
-        <text class="topology-lane-label" x="24" :y="layout.y - 18">{{ layout.line.name }}</text>
-        <path class="topology-line-shadow" :d="`M${layout.startX} ${layout.y}H${layout.endX}`" />
-        <path
-          class="topology-main-line"
-          :style="{ stroke: layout.line.color }"
-          :d="`M${layout.startX} ${layout.y}H${layout.endX}`"
-        />
-        <path class="topology-line-flow" :d="`M${layout.startX} ${layout.y}H${layout.endX}`" />
-
-        <template v-for="branch in layout.branches" :key="branch.branch.device.id">
+        <g
+          v-for="layout in lineLayouts"
+          :key="layout.line.id"
+          class="topology-line-group"
+          :class="{
+            'is-dimmed': isLineDimmed(layout.line.id),
+            'is-selected': selectedLineId === layout.line.id,
+            'is-dashed': cableLineStyles[layout.line.status].dashed,
+          }"
+          :style="{
+            '--cable-line-color': cableLineStyles[layout.line.status].color,
+            '--cable-selection-outline': cableSelectionOutline,
+          }"
+          @click="emit('select-line', layout.line)"
+        >
+          <title>{{ layout.line.name }} · {{ layout.line.statusLabel }}</title>
+          <text class="topology-lane-label" x="24" :y="layout.y - 46">
+            {{
+              layout.line.name.length > 40 ? `${layout.line.name.slice(0, 40)}…` : layout.line.name
+            }}
+            · {{ layout.line.statusLabel }}
+          </text>
+          <path class="topology-line-shadow" :d="`M${layout.startX} ${layout.y}H${layout.endX}`" />
+          <path class="topology-main-line" :d="`M${layout.startX} ${layout.y}H${layout.endX}`" />
           <path
-            class="topology-line-shadow"
-            :d="`M${branch.parent.x} ${branch.parent.y}V${branch.branch.y}H${branch.branch.x}`"
+            v-if="!cableLineStyles[layout.line.status].dashed"
+            class="topology-line-flow"
+            :d="`M${layout.startX} ${layout.y}H${layout.endX}`"
           />
+
+          <template v-for="branch in layout.branches" :key="branch.branch.device.id">
+            <path
+              class="topology-line-shadow"
+              :d="`M${branch.parent.x} ${branch.parent.y}V${branch.branch.y}H${branch.branch.x}`"
+            />
+            <path
+              class="topology-main-line"
+              :d="`M${branch.parent.x} ${branch.parent.y}V${branch.branch.y}H${branch.branch.x}`"
+            />
+            <circle
+              class="topology-branch-junction"
+              :cx="branch.parent.x"
+              :cy="branch.parent.y"
+              r="7"
+            />
+          </template>
+
           <path
-            class="topology-main-line"
-            :style="{ stroke: layout.line.color }"
-            :d="`M${branch.parent.x} ${branch.parent.y}V${branch.branch.y}H${branch.branch.x}`"
+            v-if="layout.line.faultSegment"
+            class="topology-fault-segment"
+            :style="{ stroke: cableLineStyles.fault.color }"
+            :d="faultPath(layout.line)"
           />
-          <circle
-            class="topology-branch-junction"
-            :style="{ stroke: layout.line.color }"
-            :cx="branch.parent.x"
-            :cy="branch.parent.y"
-            r="7"
-          />
-        </template>
+        </g>
+      </svg>
 
-        <path
-          v-if="layout.line.faultSegment"
-          class="topology-fault-segment"
-          :d="faultPath(layout.line)"
-        />
-      </g>
-    </svg>
-
-    <button
-      v-for="layout in nodeLayouts"
-      :key="layout.device.id"
-      type="button"
-      class="topology-device-node"
-      :class="[
-        `is-${layout.device.status}`,
-        {
-          'is-selected': selectedDeviceId === layout.device.id,
-          'is-dimmed': isNodeDimmed(layout.line.id),
-          'is-fault-reference': layout.line.faultSegment?.toDeviceId === layout.device.id,
-        },
-      ]"
-      :style="nodeStyle(layout)"
-      @click="emit('select-device', layout.device)"
-    >
-      <strong>{{ layout.device.id }}</strong>
-      <span>{{ layout.device.position }}</span>
-    </button>
+      <button
+        v-for="layout in nodeLayouts"
+        :key="layout.device.id"
+        type="button"
+        class="topology-device-node"
+        :class="[
+          `is-${layout.device.status}`,
+          {
+            'is-selected': selectedDeviceId === layout.device.id,
+            'is-dimmed': isNodeDimmed(layout.line.id),
+            'is-fault-reference': layout.line.faultSegment?.toDeviceId === layout.device.id,
+          },
+        ]"
+        :style="nodeStyle(layout)"
+        :title="`${layout.line.name} · 节点 ${layout.device.sequence} · ${layout.device.id}`"
+        :aria-label="`${layout.line.name}，节点 ${layout.device.sequence}，设备 ${layout.device.id}，${layout.device.statusLabel}`"
+        @click="emit('select-device', layout.device)"
+      >
+        <strong aria-hidden="true">{{ String(layout.device.sequence).padStart(2, '0') }}</strong>
+      </button>
+    </div>
   </section>
 </template>

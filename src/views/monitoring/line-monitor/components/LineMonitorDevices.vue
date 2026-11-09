@@ -30,7 +30,7 @@ const emit = defineEmits<{
       >
         <i class="line-monitor-state-dot" :class="`is-${device.state}`"></i>
         <span>
-          <strong>{{ device.id }}</strong>
+          <strong class="asset-identifier asset-truncate" :title="device.id">{{ device.id }}</strong>
           <small>{{ device.position }}</small>
         </span>
         <em :class="{ 'is-warning': (device.latencyMs ?? 0) > 200 }">

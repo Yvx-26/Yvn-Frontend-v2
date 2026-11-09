@@ -30,7 +30,7 @@ defineProps<{
         <tbody>
           <tr v-for="node in nodes" :key="node.id">
             <td>监测点 {{ node.id }}</td>
-            <td>{{ node.deviceId }}</td>
+            <td class="asset-identifier" :title="node.deviceId">{{ node.deviceId }}</td>
             <td>
               <span class="line-situation-node-status" :class="`is-${node.status}`">
                 {{ node.statusLabel }}

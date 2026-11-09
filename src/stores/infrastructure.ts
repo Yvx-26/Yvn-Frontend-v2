@@ -1,7 +1,14 @@
 import { ref, shallowRef } from 'vue'
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import type { ManagedDevice, ManagedLine } from '../domain/infrastructure/types'
-import { cloneDevice, cloneLine, formatAge, hasCoordinate } from '../domain/infrastructure/helpers'
+import {
+  cloneDevice,
+  cloneLine,
+  defaultOfflineThresholdSeconds,
+  formatAge,
+  hasCoordinate,
+  parseOfflineThreshold,
+} from '../domain/infrastructure/helpers'
 import { fetchInfrastructure, putDevice, putLine } from '../services/infrastructure-api'
 import {
   fetchDashboardDevices,
@@ -16,7 +23,6 @@ import { isRequestCancelled } from '../services/http'
 interface Activity {
   at: string | null
   age: number | null
-  online: boolean
   checkedAt: number
 }
 
@@ -73,7 +79,8 @@ export const useInfrastructureStore = defineStore('infrastructure', () => {
       .filter((item): item is Activity => Boolean(item))
       .map((item) => ({
         ...item,
-        age: item.age == null ? null : item.age + (now - item.checkedAt) / 1000,
+        age:
+          item.age == null ? null : item.age + Math.max(0, Math.floor((now - item.checkedAt) / 1000)),
       }))
       .sort((a, b) => (a.age ?? Infinity) - (b.age ?? Infinity))[0]
   }
@@ -82,8 +89,9 @@ export const useInfrastructureStore = defineStore('infrastructure', () => {
     devices.value.forEach((device) => {
       const current = activity(device)
       if (!current) return
-      device.state =
-        current.online && (current.age == null || current.age <= 90) ? 'online' : 'offline'
+      const threshold =
+        parseOfflineThreshold(device.network.offlineThresholdSeconds) ?? defaultOfflineThresholdSeconds
+      device.state = current.age !== null && current.age <= threshold ? 'online' : 'offline'
       device.lastSeen = formatAge(current.age, current.at ?? '暂无上报')
     })
     syncLineDevices()
@@ -100,26 +108,30 @@ export const useInfrastructureStore = defineStore('infrastructure', () => {
       waveActivity.set(item.imei, {
         at: item.last_wave_time,
         age: item.age_seconds ?? null,
-        online: item.online,
         checkedAt: Date.now(),
       }),
     )
     applyActivity()
   }
 
+  function applyLocationCoordinates(items: DashboardMapPoint[]) {
+    const byId = new Map(devices.value.map((device) => [device.id, device]))
+    items.forEach((item) => {
+      const device = byId.get(item.imei)
+      if (device && hasCoordinate([item.lng, item.lat])) device.coordinate = [item.lng, item.lat]
+    })
+  }
+
   function applyLocationStatus(items: DashboardMapPoint[]) {
     locationPoints.value = items
-    const byId = new Map(devices.value.map((device) => [device.id, device]))
     items.forEach((item) => {
       locationActivity.set(item.imei, {
         at: item.updated_at,
         age: item.age_seconds,
-        online: item.online,
         checkedAt: Date.now(),
       })
-      const device = byId.get(item.imei)
-      if (device && hasCoordinate([item.lng, item.lat])) device.coordinate = [item.lng, item.lat]
     })
+    applyLocationCoordinates(items)
     applyActivity()
   }
 
@@ -134,7 +146,7 @@ export const useInfrastructureStore = defineStore('infrastructure', () => {
         if (revision !== inventoryRevision) return
         devices.value = snapshot.devices.map(cloneDevice)
         lines.value = snapshot.lines.map(cloneLine)
-        applyLocationStatus(locationPoints.value)
+        applyLocationCoordinates(locationPoints.value)
         applyActivity()
         initialized.value = true
         inventoryAt = Date.now()
@@ -161,6 +173,7 @@ export const useInfrastructureStore = defineStore('infrastructure', () => {
     signal.throwIfAborted()
     if (results[0].status === 'fulfilled') applyRuntimeStatus(results[0].value)
     if (results[1].status === 'fulfilled') applyLocationStatus(results[1].value)
+    if (results.every((result) => result.status === 'rejected')) applyActivity()
     const failure = results.find((result) => result.status === 'rejected')
     if (failure?.status === 'rejected') throw failure.reason
   }
@@ -241,7 +254,7 @@ export const useInfrastructureStore = defineStore('infrastructure', () => {
         }
       })
       repairLocatorLinks()
-      syncLineDevices()
+      applyActivity()
       await reloadAfterSave()
     } finally {
       saving.value = false

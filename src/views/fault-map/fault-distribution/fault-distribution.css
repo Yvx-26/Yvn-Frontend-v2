@@ -175,19 +175,9 @@
 .fault-line-item > i {
   width: 7px;
   height: 7px;
-  background: #31d381;
+  background: currentColor;
   border-radius: 50%;
-  box-shadow: 0 0 7px rgba(49, 211, 129, 0.72);
-}
-
-.fault-line-item > i.is-warning {
-  background: #f5a623;
-  box-shadow: 0 0 7px rgba(245, 166, 35, 0.76);
-}
-
-.fault-line-item > i.is-fault {
-  background: #ff5268;
-  box-shadow: 0 0 7px rgba(255, 82, 104, 0.82);
+  box-shadow: 0 0 7px currentColor;
 }
 
 .fault-line-copy {
@@ -215,18 +205,9 @@
 }
 
 .fault-line-status {
-  color: #4ddb92;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-}
-
-.fault-line-status.is-warning {
-  color: #f5b43a;
-}
-
-.fault-line-status.is-fault {
-  color: #ff6376;
 }
 
 .fault-map-tools {
@@ -307,26 +288,7 @@
 }
 
 .fault-map-device-marker > i {
-  width: 6px;
-  height: 6px;
-  background: #dffbff;
-  border-radius: 50%;
-}
-
-.fault-map-device-marker > span {
-  position: absolute;
-  bottom: calc(100% + 7px);
-  left: 50%;
-  padding: 2px 5px;
-  color: #e5f6ff;
-  font-family: Consolas, monospace;
-  font-size: 12px;
-  font-weight: 700;
-  background: rgba(5, 25, 43, 0.84);
-  border-radius: 3px;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  text-shadow: 0 1px 3px #000000;
+  font: 700 10px Consolas, monospace;
 }
 
 .fault-map-device-marker.is-warning {
@@ -341,7 +303,7 @@
 }
 
 .fault-map-device-marker.is-warning > i {
-  background: #ffe3a4;
+  color: #ffe3a4;
 }
 
 .fault-map-device-marker.is-offline {
@@ -354,7 +316,7 @@
 }
 
 .fault-map-device-marker.is-offline > i {
-  background: #718797;
+  color: #c8d8e4;
 }
 
 .fault-map-fault-marker {
@@ -711,7 +673,8 @@
 .fault-distribution-legend > div {
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 5px 12px;
 }
 
 .fault-distribution-legend span {
@@ -719,6 +682,13 @@
   align-items: center;
   white-space: nowrap;
   gap: 6px;
+}
+
+.fault-distribution-legend > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fault-distribution-legend i {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LineMonitorLineView } from '../types'
+import { cableLineStyles } from '../../../../domain/map/lines'
 
 defineProps<{
   lines: LineMonitorLineView[]
@@ -32,10 +33,10 @@ const typeLabels = {
         :class="{ 'is-active': item.line.id === selectedLineId }"
         @click="emit('select', item.line.id)"
       >
-        <i class="line-monitor-state-dot" :class="`is-${item.status}`"></i>
+        <i class="line-monitor-state-dot" :style="{ background: cableLineStyles[item.status].color }"></i>
         <span class="line-monitor-list-copy">
-          <strong>{{ item.line.name }}</strong>
-          <span>{{ typeLabels[item.line.type] }} · {{ item.statusText }}</span>
+          <strong class="asset-truncate" :title="item.line.name">{{ item.line.name }}</strong>
+          <span :title="item.statusDetail">{{ typeLabels[item.line.type] }} · {{ item.statusLabel }}</span>
           <small>
             <span>定位点 <b>{{ item.line.devices.length }}</b></span>
             <span>在线 <b>{{ item.onlineCount }}/{{ item.line.devices.length || '--' }}</b></span>

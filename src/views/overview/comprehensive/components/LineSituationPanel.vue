@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import CableLineLegend from '../../../../components/common/CableLineLegend.vue'
+import { resolveCableLineState } from '../../../../domain/map/lines'
 import type { ManagedDevice, ManagedLine } from '../../../../domain/infrastructure/types'
 import OverviewLineMap from './OverviewLineMap.vue'
 
@@ -15,6 +17,7 @@ const selectedDeviceId = ref('')
 const selectedLine = computed(
   () => props.lines.find((line) => line.id === selectedLineId.value) ?? props.lines[0],
 )
+const lineState = computed(() => selectedLine.value && resolveCableLineState(selectedLine.value, props.devices))
 const selectedDevice = computed(() =>
   selectedLine.value?.devices.find((device) => device.id === selectedDeviceId.value),
 )
@@ -65,7 +68,8 @@ watch(
       <div>
         <strong>线路运行态势</strong>
         <span v-if="selectedLine">
-          {{ selectedLine.name }} · {{ onlineCount }}/{{ selectedLine.devices.length }} 个节点在线
+          {{ selectedLine.name }} · {{ onlineCount }}/{{ selectedLine.devices.length }} 个定位节点在线
+          <template v-if="lineState"> · {{ lineState.statusLabel }}</template>
         </span>
         <span v-else>暂无已配置线路</span>
       </div>
@@ -87,9 +91,10 @@ watch(
       </div>
     </header>
 
-    <div v-if="selectedLine" class="overview-line-canvas">
+    <div v-if="selectedLine && lineState" class="overview-line-canvas">
       <OverviewLineMap
         :line="selectedLine"
+        :line-state="lineState"
         :selected-device-id="selectedDeviceId"
         @select-device="selectDevice"
       />
@@ -108,9 +113,10 @@ watch(
         </button>
       </nav>
 
-      <div class="overview-map-caption" aria-label="节点状态图例">
-        <span><i class="is-normal"></i>运行正常</span>
-        <span><i class="is-warning"></i>数据异常</span>
+      <div class="overview-map-caption">
+        <CableLineLegend />
+        <span><i class="is-normal"></i>设备在线</span>
+        <span><i class="is-warning"></i>设备异常</span>
         <span><i class="is-offline"></i>设备离线</span>
       </div>
 
@@ -125,7 +131,7 @@ watch(
         <dl>
           <div>
             <dt>设备编号</dt>
-            <dd>{{ selectedDevice.id }}</dd>
+            <dd class="asset-identifier">{{ selectedDevice.id }}</dd>
           </div>
           <div>
             <dt>最近上报</dt>

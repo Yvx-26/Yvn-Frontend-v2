@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import CableLineLegend from '../../../../components/common/CableLineLegend.vue'
 import type { BoundLineDevice, ManagedLine } from '../../../../domain/infrastructure/types'
+import { hasCoordinate } from '../../../../domain/infrastructure/helpers'
+import type { CableLineState } from '../../../../domain/map/types'
 import { loadAmap } from '../../../../integrations/amap/loader'
+import { cableStroke, createCableLabelLayer } from '../../../../integrations/amap/cable-lines'
+import { nodeMarkerContent } from '../../../../integrations/amap/markers'
 import type {
   AMapMapInstance,
   AMapNamespace,
   AMapOverlay,
 } from '../../../../integrations/amap/types'
-import type { LineRuntimeStatus } from '../types'
 
 const props = defineProps<{
   line: ManagedLine
-  status: LineRuntimeStatus
+  lineState: CableLineState
   selectedDeviceId: string
   isLive: boolean
 }>()
@@ -25,58 +29,40 @@ const isLoading = ref(true)
 const loadError = ref('')
 const markerElements = new Map<string, HTMLElement>()
 const overlays: AMapOverlay[] = []
+let routeLine: AMapOverlay | undefined
+let lineLabels: ReturnType<typeof createCableLabelLayer> | undefined
 let map: AMapMapInstance | undefined
 let AMapApi: AMapNamespace | undefined
 let initializationId = 0
 
 const orderedDevices = computed(() =>
-  props.line.devices.slice().sort((left, right) => left.sequence - right.sequence),
+  props.line.devices.filter((device) => hasCoordinate(device.coordinate)).sort((left, right) => left.sequence - right.sequence),
 )
 
 const lineSignature = computed(() =>
-  orderedDevices.value
+  `${props.line.id}:${orderedDevices.value
     .map((device) => `${device.id}:${device.sequence}:${device.coordinate.join(',')}`)
-    .join('|'),
+    .join('|')}`,
 )
 
 function createDeviceContent(device: BoundLineDevice) {
-  const marker = document.createElement('button')
-  marker.type = 'button'
-  marker.className = `line-monitor-map-marker is-${device.state}`
-  marker.setAttribute('aria-label', `${device.id}，${device.position}`)
-
-  const point = document.createElement('i')
-  point.textContent = String(device.sequence).padStart(2, '0')
-  const copy = document.createElement('span')
-  const id = document.createElement('strong')
-  id.textContent = device.id
-  const position = document.createElement('small')
-  position.textContent = device.position
-  copy.append(id, position)
-  marker.append(point, copy)
+  const marker = nodeMarkerContent(
+    `line-monitor-map-marker is-${device.state}`,
+    device.sequence,
+    `${device.id}，${device.position || device.name}`,
+  )
   markerElements.set(device.id, marker)
   return marker
 }
 
-function createFlowContent() {
-  const flow = document.createElement('span')
-  flow.className = 'line-monitor-flow-particle'
-  flow.textContent = '›'
-  return flow
-}
-
-function midpoint(left: BoundLineDevice, right: BoundLineDevice): [number, number] {
-  return [
-    (left.coordinate[0] + right.coordinate[0]) / 2,
-    (left.coordinate[1] + right.coordinate[1]) / 2,
-  ]
-}
-
 function clearMap() {
+  lineLabels?.destroy()
+  lineLabels = undefined
   map?.destroy()
   map = undefined
   markerElements.clear()
   overlays.splice(0)
+  routeLine = undefined
 }
 
 function syncSelectedDevice() {
@@ -91,16 +77,18 @@ function syncMarkers() {
     if (!element) return
     element.classList.remove('is-online', 'is-offline', 'is-warning')
     element.classList.add(`is-${device.state}`)
-    const position = element.querySelector('small')
-    if (position) position.textContent = device.position
+    element.title = `${device.id}，${device.position || device.name}`
+    element.setAttribute('aria-label', element.title)
   })
-  if (orderedDevices.value.length >= 2)
-    overlays[1]?.setOptions({ strokeColor: props.status === 'warning' ? '#f5a623' : '#20d9f5' })
 }
 
-function syncLiveState() {
-  const particles = mapContainer.value?.querySelectorAll<HTMLElement>('.line-monitor-flow-particle')
-  particles?.forEach((particle) => particle.classList.toggle('is-paused', !props.isLive))
+function syncLineState() {
+  routeLine?.setOptions(cableStroke(props.lineState.status, true))
+  lineLabels?.setRoutes([{
+    path: orderedDevices.value.map((device) => device.coordinate),
+    name: props.line.name,
+    statusLabel: props.lineState.statusLabel,
+  }])
 }
 
 async function initializeMap() {
@@ -127,53 +115,33 @@ async function initializeMap() {
       showLabel: true,
       viewMode: '2D',
     })
+    lineLabels = createCableLabelLayer(map, mapContainer.value)
 
     if (orderedDevices.value.length >= 2) {
       const path = orderedDevices.value.map((device) => device.coordinate)
-      overlays.push(
-        new AMapApi.Polyline({
-          path,
-          strokeColor: '#0b3151',
-          strokeOpacity: 0.92,
-          strokeWeight: 11,
-          lineJoin: 'round',
-          lineCap: 'round',
-          zIndex: 38,
-        }),
-        new AMapApi.Polyline({
-          path,
-          strokeColor: props.status === 'warning' ? '#f5a623' : '#20d9f5',
-          strokeOpacity: 0.96,
-          strokeWeight: 5,
-          lineJoin: 'round',
-          lineCap: 'round',
-          showDir: true,
-          zIndex: 42,
-        }),
-      )
+      routeLine = new AMapApi.Polyline({
+        path,
+        ...cableStroke(props.lineState.status, true),
+        strokeOpacity: 0.96,
+        lineJoin: 'round',
+        lineCap: 'round',
+      })
+      overlays.push(routeLine)
     }
 
-    orderedDevices.value.forEach((device, index) => {
+    orderedDevices.value.forEach((device) => {
+      const content = createDeviceContent(device)
+      content.addEventListener('click', (event) => {
+        event.stopPropagation()
+        emit('select-device', device.id)
+      })
       const marker = new AMapApi!.Marker({
         position: device.coordinate,
-        content: createDeviceContent(device),
+        content,
         anchor: 'center',
         zIndex: 62,
       })
-      marker.on('click', () => emit('select-device', device.id))
       overlays.push(marker)
-
-      const nextDevice = orderedDevices.value[index + 1]
-      if (nextDevice) {
-        overlays.push(
-          new AMapApi!.Marker({
-            position: midpoint(device, nextDevice),
-            content: createFlowContent(),
-            anchor: 'center',
-            zIndex: 48,
-          }),
-        )
-      }
     })
 
     if (overlays.length) {
@@ -182,7 +150,7 @@ async function initializeMap() {
     }
     isLoading.value = false
     syncSelectedDevice()
-    syncLiveState()
+    syncLineState()
   } catch (error) {
     isLoading.value = false
     loadError.value = error instanceof Error ? error.message : '高德地图初始化失败'
@@ -195,8 +163,8 @@ function focusLine() {
 
 watch(lineSignature, initializeMap)
 watch(() => props.selectedDeviceId, syncSelectedDevice)
-watch(() => props.isLive, syncLiveState)
-watch(() => [props.line.devices, props.status], syncMarkers, { deep: true })
+watch(() => props.line.devices, syncMarkers, { deep: true })
+watch(() => [props.lineState.status, props.line.name], syncLineState)
 onMounted(initializeMap)
 onBeforeUnmount(() => {
   initializationId += 1
@@ -210,7 +178,7 @@ onBeforeUnmount(() => {
 
     <div class="line-monitor-map-heading">
       <strong>线路运行态势</strong>
-      <span>{{ line.name }} · 设备位置、线路状态与实时数据流</span>
+      <span class="asset-truncate" :title="line.name">{{ line.name }} · 设备位置与线路状态</span>
     </div>
 
     <div class="line-monitor-map-tools">
@@ -233,17 +201,18 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="line.devices.length === 0 && !isLoading" class="line-monitor-map-empty">
+    <div v-if="orderedDevices.length === 0 && !isLoading" class="line-monitor-map-empty">
       <svg><use href="#icon-map-points" /></svg>
       <strong>尚未生成线路态势</strong>
       <span>请先在线路管理中绑定至少两个定位设备</span>
     </div>
 
     <div class="line-monitor-live-state" :class="{ 'is-paused': !isLive }">
-      <i></i>{{ isLive ? '实时数据流接收中' : '实时刷新已暂停' }}
+      <i></i>{{ isLive ? '实时刷新中' : '实时刷新已暂停' }}
     </div>
 
     <div class="line-monitor-map-legend">
+      <CableLineLegend />
       <span><i class="line-monitor-state-dot is-online"></i>在线</span>
       <span><i class="line-monitor-state-dot is-warning"></i>异常</span>
       <span><i class="line-monitor-state-dot is-offline"></i>离线</span>

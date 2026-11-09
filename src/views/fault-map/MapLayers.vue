@@ -16,7 +16,7 @@ import { toCableLines } from '../../domain/map/lines'
 import './map-layers/map-layers.css'
 
 const infrastructureStore = useInfrastructureStore()
-const cableLines = computed(() => toCableLines(infrastructureStore.lines))
+const cableLines = computed(() => toCableLines(infrastructureStore.lines, infrastructureStore.devices))
 
 const baseMap = ref<BaseMapType>('dark')
 const overlayOpacity = ref(85)
@@ -31,6 +31,7 @@ const layerVisibility = reactive<LayerVisibility>({
 const statusVisibility = reactive<StatusVisibility>({
   normal: true,
   warning: true,
+  draft: true,
   fault: true,
 })
 

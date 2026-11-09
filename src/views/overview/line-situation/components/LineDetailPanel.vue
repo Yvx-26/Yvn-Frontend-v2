@@ -30,7 +30,7 @@ const abnormalCount = computed(
     <div class="line-situation-detail" aria-live="polite">
       <div class="line-situation-detail-title">
         <svg aria-hidden="true"><use href="#icon-line-status" /></svg>
-        <strong>{{ line.name }}</strong>
+        <strong class="asset-label">{{ line.name }}</strong>
       </div>
 
       <dl class="line-situation-detail-grid">

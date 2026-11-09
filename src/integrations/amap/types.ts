@@ -8,6 +8,9 @@ export interface AMapOverlay {
 }
 
 export interface AMapMapInstance {
+  on(eventName: string, handler: () => void): void
+  off(eventName: string, handler: () => void): void
+  lngLatToContainer(coordinate: Coordinate): { x: number; y: number }
   add(overlays: AMapOverlay | AMapOverlay[]): void
   destroy(): void
   remove(overlays: AMapOverlay | AMapOverlay[]): void

@@ -51,7 +51,7 @@ function bindSelectedDevice() {
         >
           <span class="line-management-device-order">{{ String(index + 1).padStart(2, '0') }}</span>
           <span class="line-management-device-copy">
-            <strong>{{ device.id }}</strong>
+            <strong class="asset-identifier asset-truncate" :title="device.id">{{ device.id }}</strong>
             <span>{{ device.position }}</span>
             <small>{{ device.coordinate[0].toFixed(4) }}, {{ device.coordinate[1].toFixed(4) }}</small>
           </span>

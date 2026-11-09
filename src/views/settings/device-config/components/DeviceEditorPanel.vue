@@ -166,7 +166,7 @@ watch(
             <div v-else-if="draft.category === 'locator'" class="device-config-relation is-wide">
               <span>已关联监测设备</span>
               <div>
-                <em v-for="device in relatedMonitors" :key="device.id">{{ device.id }}</em>
+                <em v-for="device in relatedMonitors" :key="device.id" class="asset-identifier">{{ device.id }}</em>
                 <small v-if="relatedMonitors.length === 0">暂未关联监测设备</small>
               </div>
             </div>
@@ -249,7 +249,13 @@ watch(
             </label>
             <label>
               <span>离线判定（秒）</span>
-              <input v-model.trim="draft.network.offlineThresholdSeconds" type="number" />
+              <input
+                v-model.trim="draft.network.offlineThresholdSeconds"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="默认 90 秒"
+              />
             </label>
           </div>
         </section>

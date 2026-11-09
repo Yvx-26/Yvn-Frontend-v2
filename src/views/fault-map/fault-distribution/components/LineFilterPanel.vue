@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { CableLine } from '../../../../domain/map/types'
+import { cableLineStyles } from '../../../../domain/map/lines'
 
 defineProps<{
   lines: CableLine[]
@@ -28,12 +29,12 @@ const emit = defineEmits<{
         :aria-pressed="selectedLineId === line.id"
         @click="emit('select', line)"
       >
-        <i :class="`is-${line.status}`" aria-hidden="true"></i>
+        <i :style="{ color: cableLineStyles[line.status].color }" aria-hidden="true"></i>
         <span class="fault-line-copy">
-          <strong>{{ line.name }}</strong>
-          <small>{{ line.devices.length }} 个定位设备 · {{ line.length }}</small>
+          <strong class="asset-truncate" :title="line.name">{{ line.name }}</strong>
+          <small :title="line.statusDetail">{{ line.statusDetail }}</small>
         </span>
-        <span class="fault-line-status" :class="`is-${line.status}`">{{ line.statusLabel }}</span>
+        <span class="fault-line-status" :style="{ color: cableLineStyles[line.status].color }">{{ line.statusLabel }}</span>
       </button>
     </div>
   </section>

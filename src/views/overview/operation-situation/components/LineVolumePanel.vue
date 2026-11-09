@@ -25,7 +25,7 @@ function barWidth(value: number) {
 
     <div class="operation-situation-volume-body">
       <article v-for="line in lines" :key="line.id">
-        <span>{{ line.name }}</span>
+        <span class="asset-truncate" :title="line.name">{{ line.name }}</span>
         <i><i :style="{ width: barWidth(line.value) }"></i></i>
         <strong>{{ line.value }}</strong>
       </article>

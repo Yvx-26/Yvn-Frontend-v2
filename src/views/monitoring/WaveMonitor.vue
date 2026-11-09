@@ -151,8 +151,11 @@ function selectDevice(deviceId: string) {
   void refresh(true)
 }
 function selectPhasePair(phasePair: string) {
+  if (phasePair === selectedPhasePair.value) {
+    historyOpen.value = !historyOpen.value
+    return
+  }
   historyOpen.value = true
-  if (phasePair === selectedPhasePair.value) return
   historyFrameId.value = null
   selectedPhasePair.value = phasePair
   const runtime = currentRuntime.value
@@ -199,8 +202,6 @@ async function refreshWaveform(signal: AbortSignal) {
     throw new Error('历史帧的相间与当前选择不符')
   // 其他相间可能更新，而当前选中相间的波形帧没有变化。
   if (requestedFrameId === null) runtime.phaseStates = frame.phase_states ?? {}
-  // 指定历史帧成功返回后收起列表，重复选择当前帧也适用。
-  if (requestedFrameId !== null && frame.frame_valid !== false) historyOpen.value = false
   if (frame.frame_id === runtime.frameId && frame.frame_id !== null) return
   runtime.frameId = frame.frame_id
   runtime.frameValid = frame.frame_id === null ? null : frame.frame_valid !== false

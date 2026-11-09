@@ -20,7 +20,7 @@ const statistics = computed(() => [
     <header class="device-situation-panel-header">
       <div>
         <strong>设备详情</strong>
-        <span>当前选择 {{ device.id }}</span>
+        <span class="asset-identifier">当前选择 {{ device.id }}</span>
       </div>
       <span class="device-situation-status" :class="`is-${device.status}`">
         {{ device.statusLabel }}
@@ -30,7 +30,7 @@ const statistics = computed(() => [
     <div class="device-situation-detail" aria-live="polite">
       <div class="device-situation-detail-title">
         <svg aria-hidden="true"><use href="#icon-device-status" /></svg>
-        <strong>{{ device.name }}</strong>
+        <strong class="asset-label">{{ device.name }}</strong>
       </div>
 
       <dl class="device-situation-detail-grid">

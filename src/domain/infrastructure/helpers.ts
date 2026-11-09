@@ -1,5 +1,13 @@
 import type { DeviceConfiguration, ManagedDevice, ManagedLine } from './types'
 
+export const defaultOfflineThresholdSeconds = 90
+
+export function parseOfflineThreshold(value: string) {
+  const text = String(value ?? '').trim()
+  const seconds = Number(text)
+  return /^\d+$/.test(text) && Number.isSafeInteger(seconds) && seconds > 0 ? seconds : undefined
+}
+
 export function deviceConfiguration(device: ManagedDevice): DeviceConfiguration {
   const value = cloneDevice(device)
   return {
@@ -41,7 +49,7 @@ export function cloneDevice(device: ManagedDevice): ManagedDevice {
         heartbeatSeconds: String(device.network.heartbeatSeconds),
         retrySeconds: String(device.network.retrySeconds),
         timeoutSeconds: String(device.network.timeoutSeconds),
-        offlineThresholdSeconds: String(device.network.offlineThresholdSeconds),
+        offlineThresholdSeconds: String(device.network.offlineThresholdSeconds ?? ''),
       },
       acquisition: device.acquisition
         ? {
@@ -93,7 +101,7 @@ export function createDeviceDraft(id = '', lineId = ''): ManagedDevice {
       heartbeatSeconds: '30',
       retrySeconds: '5',
       timeoutSeconds: '10',
-      offlineThresholdSeconds: '90',
+      offlineThresholdSeconds: String(defaultOfflineThresholdSeconds),
     },
     acquisition: null,
   }
@@ -135,7 +143,6 @@ export function linkedMonitorText(device: ManagedDevice, devices: ManagedDevice[
 }
 
 export const deviceStateLabels = { online: '在线', warning: '数据异常', offline: '离线' } as const
-export const lineColors = ['#00d8ff', '#3c8cff', '#f5a623', '#8c7bff']
 
 export function hasCoordinate(coordinate: [number, number]) {
   const [lng, lat] = coordinate

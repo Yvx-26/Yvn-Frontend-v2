@@ -2,11 +2,13 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { cableLineStyles, cableSelectionOutline } from '../../../../domain/map/lines'
 import type { TopologyDevice, TopologyFocusMode, TopologyLine } from '../types'
 
 interface Props {
   lines: TopologyLine[]
   focusMode: TopologyFocusMode
+  selectedLineId: string
   selectedDeviceId: string
 }
 
@@ -124,6 +126,7 @@ function buildSceneContent() {
   const lineCount = Math.max(props.lines.length, 1)
   props.lines.forEach((line, lineIndex) => {
     const isDimmed = props.focusMode !== 'all' && props.focusMode !== line.id
+    const isSelected = props.selectedLineId === line.id
     const laneZ = (lineIndex - (lineCount - 1) / 2) * 5.2
     const deviceCount = Math.max(line.devices.length, 1)
     const points = line.devices.map((_, index) => {
@@ -144,7 +147,7 @@ function buildSceneContent() {
     }
 
     const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.22)
-    const color = new THREE.Color(line.color)
+    const { color, dashed } = cableLineStyles[line.status]
     const tubeMaterial = new THREE.MeshStandardMaterial({
       color,
       emissive: color,
@@ -153,16 +156,34 @@ function buildSceneContent() {
       metalness: 0.42,
       transparent: true,
       opacity: isDimmed ? 0.12 : 0.9,
+      toneMapped: false,
     })
-    const tube = new THREE.Mesh(
-      new THREE.TubeGeometry(curve, Math.max(48, points.length * 24), 0.13, 10, false),
-      tubeMaterial,
-    )
-    tube.userData = { line, label: `${line.name} · ${line.statusLabel}` }
-    contentGroup!.add(tube)
-    pickableObjects.push(tube)
+    const outlineMaterial = isSelected ? new THREE.MeshBasicMaterial({
+      color: cableSelectionOutline,
+      side: THREE.BackSide,
+      toneMapped: false,
+    }) : undefined
+    const cable = new THREE.Group()
+    cable.userData = { line, label: `${line.name} · ${line.statusLabel} · ${line.statusDetail}` }
+    const segmentCount = dashed ? Math.min(16, Math.max(5, points.length * 2)) : 1
+    const radius = isSelected ? 0.17 : 0.13
+    for (let index = 0; index < segmentCount; index += 1) {
+      const from = index / segmentCount
+      const to = (index + 0.62) / segmentCount
+      const segment = dashed ? new THREE.CatmullRomCurve3([
+        curve.getPointAt(from), curve.getPointAt((from + to) / 2), curve.getPointAt(to),
+      ]) : curve
+      const resolution = dashed ? 8 : Math.max(48, points.length * 24)
+      cable.add(new THREE.Mesh(new THREE.TubeGeometry(segment, resolution, radius, 10, false), tubeMaterial))
+      if (outlineMaterial) {
+        cable.add(new THREE.Mesh(new THREE.TubeGeometry(segment, resolution, radius + 0.05, 10, false), outlineMaterial))
+      }
+    }
+    contentGroup!.add(cable)
+    pickableObjects.push(cable)
 
-    const lineLabel = makeTextSprite(`${line.name}  ${line.length}`, line.color, 1.05)
+    const shortName = line.name.length > 18 ? `${line.name.slice(0, 18)}…` : line.name
+    const lineLabel = makeTextSprite(`${shortName} · ${line.statusLabel}`, color, 1.05)
     // 线路标签与首个设备标签使用不同的高度和水平锚点，避免默认视角下互相遮挡。
     lineLabel.position.copy(points[0]!).add(new THREE.Vector3(-0.45, 3.4, 0))
     if (lineLabel.material instanceof THREE.SpriteMaterial) {
@@ -170,7 +191,7 @@ function buildSceneContent() {
     }
     contentGroup!.add(lineLabel)
 
-    if (!isDimmed) {
+    if (!isDimmed && !dashed) {
       for (let pulseIndex = 0; pulseIndex < 3; pulseIndex += 1) {
         const pulseMaterial = new THREE.MeshBasicMaterial({ color: 0xd9fbff })
         const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), pulseMaterial)
@@ -189,7 +210,7 @@ function buildSceneContent() {
         points[Math.min(line.devices.length === 1 ? 1 : deviceIndex, points.length - 1)]!
       const group = new THREE.Group()
       group.position.copy(position)
-      group.userData = { device, line, label: `${device.name} · ${device.statusLabel}` }
+      group.userData = { device, line, label: `节点 ${device.sequence} · ${device.id} · ${device.statusLabel}` }
 
       const deviceColor = statusColor(device.status)
       const opacity = isDimmed ? 0.2 : 1
@@ -240,7 +261,7 @@ function buildSceneContent() {
         group.add(selectionRing)
       }
 
-      const deviceLabel = makeTextSprite(device.name, isDimmed ? '#607786' : '#e8faff', 0.88)
+      const deviceLabel = makeTextSprite(String(device.sequence).padStart(2, '0'), isDimmed ? '#607786' : '#e8faff', 0.58)
       deviceLabel.position.y = 2.05
       group.add(deviceLabel)
 
@@ -429,18 +450,18 @@ onMounted(async () => {
 })
 
 watch(
-  () => [props.lines, props.focusMode],
-  async () => {
+  () => [
+    JSON.stringify([props.focusMode, props.lines.map((line) => [line.id, line.devices.map((device) => device.id)])]),
+    props.lines,
+    props.selectedDeviceId,
+    props.selectedLineId,
+  ],
+  async ([layout], [previousLayout]) => {
     await nextTick()
     buildSceneContent()
-    frameScene()
+    if (layout !== previousLayout) frameScene()
   },
   { deep: true },
-)
-
-watch(
-  () => props.selectedDeviceId,
-  () => buildSceneContent(),
 )
 
 onBeforeUnmount(() => {

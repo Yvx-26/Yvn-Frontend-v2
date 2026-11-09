@@ -8,6 +8,7 @@ import {
   createDeviceDraft,
   nextAvailableId,
   hasCoordinate,
+  parseOfflineThreshold,
 } from '../../domain/infrastructure/helpers'
 import { isRequestCancelled } from '../../services/http'
 import ModuleState from '../../components/common/ModuleState.vue'
@@ -35,6 +36,12 @@ const selectedLine = computed(() =>
   infrastructureStore.lines.find((line) => line.id === draft.value.lineId),
 )
 
+const statusDevice = computed(() => {
+  const saved = infrastructureStore.devices.find((device) => device.id === editingOriginalId.value)
+  if (!saved) return draft.value
+  return { ...draft.value, state: saved.state, lastSeen: saved.lastSeen }
+})
+
 const locationDevice = computed(() => {
   if (draft.value.category !== 'monitor') return undefined
   return infrastructureStore.devices.find(
@@ -51,12 +58,18 @@ const duplicateId = computed(() =>
   ),
 )
 
+const validOfflineThreshold = computed(() => {
+  const value = String(draft.value.network.offlineThresholdSeconds).trim()
+  return value === '' || parseOfflineThreshold(value) !== undefined
+})
+
 const isComplete = computed(
   () =>
     Boolean(draft.value.id.trim()) &&
     Boolean(draft.value.name.trim()) &&
     Boolean(draft.value.lineId) &&
     !duplicateId.value &&
+    validOfflineThreshold.value &&
     hasCoordinate(draft.value.coordinate) &&
     (!draft.value.acquisition ||
       (Number.isInteger(draft.value.acquisition.batchSize) &&
@@ -70,6 +83,7 @@ const validationText = computed(() => {
   if (!draft.value.id.trim() || !draft.value.name.trim()) return '请补充设备编号和设备名称'
   if (!draft.value.lineId) return '请选择设备所属线路'
   if (!hasCoordinate(draft.value.coordinate)) return '请填写有效的经纬度，或为监测设备关联定位节点'
+  if (!validOfflineThreshold.value) return '离线判定须为正整数秒，留空使用默认值'
   if (
     draft.value.acquisition &&
     (!Number.isInteger(draft.value.acquisition.batchSize) || draft.value.acquisition.batchSize <= 0)
@@ -261,7 +275,7 @@ onBeforeUnmount(() => {
         @test-connection="testConnection"
       />
 
-      <DeviceStatusPanel :device="draft" :line="selectedLine" :location-device="locationDevice" />
+      <DeviceStatusPanel :device="statusDevice" :line="selectedLine" :location-device="locationDevice" />
     </div>
 
     <footer

@@ -52,9 +52,9 @@ const stateLabels: Record<ManagedLineState, string> = {
         @click="emit('select', line)"
       >
         <span class="line-management-list-copy">
-          <strong>{{ line.name }}</strong>
+          <strong class="asset-truncate" :title="line.name">{{ line.name }}</strong>
           <span>{{ typeLabels[line.type] }} · {{ line.lengthM || '--' }} m · {{ line.devices.length }} 台设备</span>
-          <small>{{ line.id }}</small>
+          <small class="asset-identifier asset-truncate" :title="line.id">{{ line.id }}</small>
         </span>
         <span class="line-management-list-state" :class="`is-${line.state}`">
           <i></i>{{ stateLabels[line.state] }}

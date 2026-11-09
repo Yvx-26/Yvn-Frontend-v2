@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import type { WaveMonitorRuntime } from '../types'
 import { toSignedSample } from '../../../../utils/waveform'
+import WaveformOverview from './WaveformOverview.vue'
 
 const props = defineProps<{
   runtime: WaveMonitorRuntime
@@ -22,13 +23,26 @@ const chartHeight = ref(280)
 const cursorTipWidth = ref(240)
 const isNativeFullscreen = ref(false)
 const isFallbackFullscreen = ref(false)
-// 横纵轴共用同一个倍率；只变换视窗，不改变原始采样数据。
-const zoomFactors = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64]
+type ZoomAxis = 'x' | 'y'
+const zoomAxes = [
+  { id: 'x', label: '横轴' },
+  { id: 'y', label: '纵轴' },
+] as const
+const zoomFactors = {
+  x: [1, 1.25, 1.6, 2, 2.5, 3.2, 4, 5, 6.4, 8, 10, 12.8, 16, 20, 25.6, 32, 40, 51.2, 64],
+  y: [1, 1.25, 1.6, 2, 2.5, 3.2, 4, 5, 6.4, 8, 10, 12.8, 16, 20, 25.6, 32],
+}
+const amplitudeMin = -150
+const amplitudeMax = 150
 const clipId = `wave-plot-${useId()}`
-const viewport = ref({ xMin: 0, xMax: 3999, yMin: -150, yMax: 150 })
-const zoomAnchor = ref<{ x: number; y: number } | null>(null)
+const viewport = ref({ xMin: 0, xMax: 3999, yMin: amplitudeMin, yMax: amplitudeMax })
+const zoomIndex = ref({ x: 0, y: 0 })
+let wheelAxis: ZoomAxis = 'x'
 let wheelDelta = 0
-const zoomIndex = ref(0)
+let chartDrag:
+  { pointerId: number; clientX: number; xMin: number; unitsPerPixel: number } | undefined
+const isDragging = ref(false)
+let suppressChartClick = false
 const cursorSampleIndex = ref(0)
 let resizeObserver: ResizeObserver | undefined
 
@@ -37,10 +51,11 @@ const margin = { top: 34, right: 24, bottom: 52, left: 58 }
 const plotWidth = computed(() => Math.max(180, chartWidth.value - margin.left - margin.right))
 const plotHeight = computed(() => Math.max(130, chartHeight.value - margin.top - margin.bottom))
 const sampleCount = computed(() => props.runtime.waveformSamples.length)
+const fullXSpan = computed(() => Math.max(1, sampleCount.value - 1))
 const isFullscreen = computed(() => isNativeFullscreen.value || isFallbackFullscreen.value)
 const visibleStart = computed(() => viewport.value.xMin)
 const visibleEnd = computed(() => viewport.value.xMax)
-const zoomFactor = computed(() => zoomFactors[zoomIndex.value] ?? 1)
+const xSpan = computed(() => visibleEnd.value - visibleStart.value)
 const cursorRatio = computed(
   () =>
     (cursorSampleIndex.value - visibleStart.value) /
@@ -150,8 +165,8 @@ const cursorTipLeft = computed(() => {
 function updateSize() {
   if (!chartContainer.value) return
   const rect = chartContainer.value.getBoundingClientRect()
-  chartWidth.value = Math.max(300, Math.round(rect.width))
-  chartHeight.value = Math.max(255, Math.round(rect.height))
+  if (rect.width) chartWidth.value = Math.max(300, Math.round(rect.width))
+  if (rect.height) chartHeight.value = Math.max(216, Math.round(rect.height))
   if (cursorTip.value)
     cursorTipWidth.value = Math.ceil(cursorTip.value.getBoundingClientRect().width)
 }
@@ -170,70 +185,123 @@ function positionInPlot(event: MouseEvent) {
   return { rx, ry }
 }
 
-function anchorAt(rx: number) {
-  const view = viewport.value
-  const x = Math.max(
-    0,
-    Math.min(sampleCount.value - 1, Math.round(view.xMin + rx * (view.xMax - view.xMin))),
-  )
-  // 缩放中心吸附到实际采样点，纵坐标以样本值为准。
-  return { x, y: toSignedSample(props.runtime.waveformSamples[x] ?? 0) }
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max))
 }
 
 function placeCursor(event: MouseEvent) {
+  if (suppressChartClick) {
+    suppressChartClick = false
+    return
+  }
   const position = positionInPlot(event)
   if (!position || !sampleCount.value) return
-  zoomAnchor.value = anchorAt(position.rx)
-  cursorSampleIndex.value = zoomAnchor.value.x
-  wheelDelta = 0
+  const sample = visibleStart.value + position.rx * (visibleEnd.value - visibleStart.value)
+  cursorSampleIndex.value = clamp(Math.round(sample), 0, sampleCount.value - 1)
 }
 
 function resetZoom() {
-  zoomIndex.value = 0
-  viewport.value = { xMin: 0, xMax: Math.max(1, sampleCount.value - 1), yMin: -150, yMax: 150 }
-  zoomAnchor.value = null
+  zoomIndex.value = { x: 0, y: 0 }
+  viewport.value = { xMin: 0, xMax: fullXSpan.value, yMin: amplitudeMin, yMax: amplitudeMax }
   cursorSampleIndex.value = 0
   wheelDelta = 0
+  chartDrag = undefined
+  isDragging.value = false
+  suppressChartClick = false
 }
 
-function setZoom(nextIndex: number) {
-  if (sampleCount.value < 2) return
-  const next = Math.max(0, Math.min(zoomFactors.length - 1, nextIndex))
-  if (next === zoomIndex.value) return
-  const anchor = zoomAnchor.value ?? anchorAt(0.5)
-  const factor = zoomFactors[next] ?? 1
-  const fullXSpan = sampleCount.value - 1
-  const xSpan = fullXSpan / factor
-  const ySpan = 300 / factor
-  // 局部视图以选中采样点为正中心，而不是固定其原来的屏幕比例。
-  // 边缘允许留白，避免靠近首尾的采样点因边界钳制而无法居中。
-  const xMin = next === 0 ? 0 : anchor.x - xSpan / 2
-  const yMin = next === 0 ? -150 : anchor.y - ySpan / 2
-  zoomIndex.value = next
-  viewport.value = { xMin, xMax: xMin + xSpan, yMin, yMax: yMin + ySpan }
-  zoomAnchor.value = anchor
-  cursorSampleIndex.value = anchor.x
+function changeZoom(axis: ZoomAxis, step: number, anchor = 0.5) {
+  if (sampleCount.value < 2 || (step > 0 && !canZoomIn(axis))) return
+  const factors = zoomFactors[axis]
+  const next = clamp(zoomIndex.value[axis] + step, 0, factors.length - 1)
+  if (next === zoomIndex.value[axis]) return
+  zoomIndex.value[axis] = next
+  const factor = factors[next]!
+  const view = viewport.value
+  // 缩放前后的鼠标位置对应同一采样点或幅值，直到触及整帧边界。
+  if (axis === 'x') {
+    const span = Math.max(1, fullXSpan.value / factor)
+    const start = view.xMin + (view.xMax - view.xMin - span) * anchor
+    panChart(start, span)
+  } else {
+    const span = (amplitudeMax - amplitudeMin) / factor
+    const start = view.yMin + (view.yMax - view.yMin - span) * anchor
+    const yMin = clamp(start, amplitudeMin, amplitudeMax - span)
+    viewport.value = { ...view, yMin, yMax: yMin + span }
+  }
 }
 
-function zoomIn() {
-  setZoom(zoomIndex.value + 1)
+function canZoomIn(axis: ZoomAxis) {
+  return (
+    sampleCount.value >= 2 &&
+    zoomIndex.value[axis] < zoomFactors[axis].length - 1 &&
+    (axis === 'y' || xSpan.value > 1)
+  )
 }
 
-function zoomOut() {
-  setZoom(zoomIndex.value - 1)
+function zoomFactor(axis: ZoomAxis) {
+  return axis === 'x' && sampleCount.value > 0
+    ? fullXSpan.value / xSpan.value
+    : zoomFactors[axis][zoomIndex.value[axis]]!
+}
+
+function panChart(start: number, span = visibleEnd.value - visibleStart.value) {
+  if (!sampleCount.value) return
+  const xMin = clamp(start, 0, fullXSpan.value - span)
+  viewport.value = { ...viewport.value, xMin, xMax: xMin + span }
+}
+
+function beginChartDrag(event: PointerEvent) {
+  suppressChartClick = false
+  if (
+    event.button !== 0 ||
+    sampleCount.value < 2 ||
+    xSpan.value >= fullXSpan.value ||
+    !positionInPlot(event)
+  )
+    return
+  const svg = chartContainer.value?.querySelector('svg')
+  const rect = svg?.getBoundingClientRect()
+  if (!rect?.width) return
+  chartDrag = {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    xMin: visibleStart.value,
+    unitsPerPixel:
+      ((visibleEnd.value - visibleStart.value) * chartWidth.value) / (plotWidth.value * rect.width),
+  }
+  const container = event.currentTarget as HTMLElement
+  container.setPointerCapture?.(event.pointerId)
+}
+
+function moveChartDrag(event: PointerEvent) {
+  if (!chartDrag || chartDrag.pointerId !== event.pointerId) return
+  const delta = event.clientX - chartDrag.clientX
+  if (!isDragging.value && Math.abs(delta) < 4) return
+  isDragging.value = true
+  suppressChartClick = true
+  panChart(chartDrag.xMin - delta * chartDrag.unitsPerPixel)
+}
+
+function endChartDrag(event: PointerEvent) {
+  if (chartDrag?.pointerId !== event.pointerId) return
+  chartDrag = undefined
+  isDragging.value = false
 }
 
 function handleWheel(event: WheelEvent) {
   const position = positionInPlot(event)
-  if (!position || sampleCount.value < 2 || event.deltaY === 0) return
+  const axis = event.shiftKey ? 'y' : 'x'
+  const amount = event.deltaY || (event.shiftKey ? event.deltaX : 0)
+  if (!position || sampleCount.value < 2 || amount === 0) return
   event.preventDefault()
-  if (!zoomAnchor.value) zoomAnchor.value = anchorAt(position.rx)
   const delta =
-    event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? chartHeight.value : 1)
-  if (Math.sign(delta) !== Math.sign(wheelDelta)) wheelDelta = 0
+    amount * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? chartHeight.value : 1)
+  if (axis !== wheelAxis || Math.sign(delta) !== Math.sign(wheelDelta)) wheelDelta = 0
+  wheelAxis = axis
   wheelDelta += delta
   if (Math.abs(wheelDelta) < 40) return
-  setZoom(zoomIndex.value + (wheelDelta < 0 ? 1 : -1))
+  changeZoom(axis, wheelDelta < 0 ? 1 : -1, axis === 'x' ? position.rx : 1 - position.ry)
   wheelDelta = 0
 }
 
@@ -273,7 +341,20 @@ async function toggleFullscreen() {
   isFallbackFullscreen.value = true
 }
 
-watch(() => [props.runtime.frameId, sampleCount.value], resetZoom, { immediate: true })
+watch(
+  sampleCount,
+  (count) => {
+    chartDrag = undefined
+    isDragging.value = false
+    wheelDelta = 0
+    // 切换相间时会先清空采样；等新帧到达再按已有倍率约束横轴范围。
+    if (!count) return
+    const span = Math.max(1, fullXSpan.value / zoomFactors.x[zoomIndex.value.x]!)
+    panChart(visibleStart.value, span)
+    cursorSampleIndex.value = Math.min(cursorSampleIndex.value, count - 1)
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   updateSize()
@@ -321,33 +402,36 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="wave-monitor-view-actions">
-        <span class="wave-monitor-zoom-range">
-          采样点 {{ formatTick(visibleStart) }}–{{ formatTick(visibleEnd) }} / {{ sampleCount }} ·
-          {{ zoomFactor }}×
-        </span>
-        <button
-          type="button"
-          aria-label="缩小波形"
-          title="将选中采样点居中，等比例缩小横纵坐标"
-          :disabled="zoomIndex === 0"
-          @click="zoomOut"
+        <div
+          v-for="axis in zoomAxes"
+          :key="axis.id"
+          class="wave-monitor-axis-controls"
+          role="group"
+          :aria-label="`${axis.label}缩放`"
         >
-          <svg><use href="#icon-zoom-out" /></svg>
-        </button>
-        <button
-          type="button"
-          aria-label="放大波形"
-          title="将选中采样点居中，等比例放大横纵坐标"
-          :disabled="sampleCount < 2 || zoomIndex === zoomFactors.length - 1"
-          @click="zoomIn"
-        >
-          <svg><use href="#icon-zoom-in" /></svg>
-        </button>
+          <span>{{ axis.label }} {{ formatTick(zoomFactor(axis.id)) }}×</span>
+          <button
+            type="button"
+            :aria-label="`缩小${axis.label}`"
+            :disabled="sampleCount < 2 || zoomIndex[axis.id] === 0"
+            @click="changeZoom(axis.id, -1)"
+          >
+            <svg><use href="#icon-zoom-out" /></svg>
+          </button>
+          <button
+            type="button"
+            :aria-label="`放大${axis.label}`"
+            :disabled="!canZoomIn(axis.id)"
+            @click="changeZoom(axis.id, 1)"
+          >
+            <svg><use href="#icon-zoom-in" /></svg>
+          </button>
+        </div>
         <button
           type="button"
           aria-label="重置波形缩放"
-          title="恢复完整波形和坐标范围（也可双击图形）"
-          :disabled="zoomIndex === 0"
+          title="恢复全帧和幅值范围（也可双击图形）"
+          :disabled="zoomIndex.x === 0 && zoomIndex.y === 0"
           @click="resetZoom"
         >
           ↺
@@ -370,20 +454,27 @@ onBeforeUnmount(() => {
     <div
       ref="chartContainer"
       class="wave-monitor-chart-wrap"
-      title="点击选中采样点，滚轮缩放时将该点移至中心，双击复位"
+      :class="{ 'is-pannable': sampleCount > 1 && xSpan < fullXSpan, 'is-dragging': isDragging }"
+      title="滚轮缩放横轴，Shift＋滚轮缩放纵轴，横向拖动查看，双击复位"
       @click="placeCursor"
       @dblclick="resetZoom"
+      @pointerdown="beginChartDrag"
+      @pointermove="moveChartDrag"
+      @pointerup="endChartDrag"
+      @pointercancel="endChartDrag"
+      @lostpointercapture="endChartDrag"
     >
       <svg
         class="wave-monitor-wave-svg"
         :viewBox="`0 0 ${chartWidth} ${chartHeight}`"
+        preserveAspectRatio="none"
         role="img"
         aria-label="实时行波采样曲线，横轴为采样点序号，纵轴为原始字节转换后的有符号采样值"
       >
         <title>实时行波幅值曲线</title>
         <desc>
-          横轴为原始采样点序号，纵轴为原始字节转换后的有符号采样值。点击选择缩放中心，
-          使用滚轮或加减按钮将选中采样点居中，并等比例缩放横纵坐标；双击或点击复位恢复完整视图。
+          横轴为采样点序号，纵轴为有符号采样值。滚轮缩放横轴，按住 Shift 滚动缩放纵轴。
+          横向放大后可拖动查看相邻采样点，点击曲线可读数，双击可恢复全帧。
         </desc>
 
         <defs>
@@ -482,6 +573,16 @@ onBeforeUnmount(() => {
       >
         采样点 {{ cursorSampleIndex }} · 有符号值 {{ cursorValue }} · 原始字节 {{ cursorRawValue }}
       </div>
+    </div>
+
+    <div class="wave-monitor-overview-row">
+      <WaveformOverview
+        v-if="sampleCount > 1"
+        :samples="runtime.waveformSamples"
+        :start="visibleStart"
+        :end="visibleEnd"
+        @pan="panChart"
+      />
     </div>
 
     <div class="wave-monitor-frame-stats" aria-label="各相间最新帧故障状态">

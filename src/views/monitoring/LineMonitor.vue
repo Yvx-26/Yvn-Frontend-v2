@@ -3,13 +3,14 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { fetchLatestWaveform } from '../../services/telemetry-api'
 import { usePolling } from '../../composables/usePolling'
 import ModuleState from '../../components/common/ModuleState.vue'
+import { cableLineStyles, resolveCableLineState } from '../../domain/map/lines'
 import { useInfrastructureStore } from '../../stores/infrastructure'
 import { waveformStatistics } from '../../utils/waveform'
 import LineBatchProgress from './line-monitor/components/LineBatchProgress.vue'
 import LineMonitorDevices from './line-monitor/components/LineMonitorDevices.vue'
 import LineMonitorList from './line-monitor/components/LineMonitorList.vue'
 import LineMonitorMap from './line-monitor/components/LineMonitorMap.vue'
-import type { LineBatchRuntime, LineMonitorLineView, LineRuntimeStatus } from './line-monitor/types'
+import type { LineBatchRuntime, LineMonitorLineView } from './line-monitor/types'
 import './line-monitor/line-monitor.css'
 
 const infrastructureStore = useInfrastructureStore()
@@ -29,25 +30,11 @@ const refreshedAt = ref<Record<string, Date>>({})
 const snapshotMessageVisible = ref(false)
 let toastTimer: number | undefined
 
-function resolveStatus(line: (typeof infrastructureStore.lines)[number]): LineRuntimeStatus {
-  if (line.state === 'draft' || line.devices.length === 0) return 'draft'
-  if (line.devices.some((device) => device.state !== 'online')) return 'warning'
-  return 'normal'
-}
-
-const statusLabels: Record<LineRuntimeStatus, string> = {
-  normal: '运行正常',
-  warning: '通信预警',
-  draft: '待接入',
-}
-
 const lineViews = computed<LineMonitorLineView[]>(() =>
   infrastructureStore.lines.map((line) => {
-    const status = resolveStatus(line)
     return {
       line,
-      status,
-      statusText: statusLabels[status],
+      ...resolveCableLineState(line, infrastructureStore.devices),
       onlineCount: line.devices.filter((device) => device.state === 'online').length,
     }
   }),
@@ -198,9 +185,9 @@ watch(
     <template v-else>
       <section class="line-monitor-summary" aria-label="当前线路摘要">
         <div>
-          <i class="line-monitor-state-dot" :class="`is-${currentLineView.status}`"></i>
-          <strong>{{ currentLineView.line.name }}</strong>
-          <span>{{ currentLineView.statusText }}</span>
+          <i class="line-monitor-state-dot" :style="{ background: cableLineStyles[currentLineView.status].color }"></i>
+          <strong class="asset-truncate" :title="currentLineView.line.name">{{ currentLineView.line.name }}</strong>
+          <span>{{ currentLineView.statusLabel }} · {{ currentLineView.statusDetail }}</span>
         </div>
         <div>
           <span
@@ -210,7 +197,7 @@ watch(
             >定位点<strong>{{ currentLineView.line.devices.length }}</strong></span
           >
           <span>
-            在线设备
+            在线定位点
             <strong
               >{{ currentLineView.onlineCount }}/{{
                 currentLineView.line.devices.length || '--'
@@ -242,7 +229,7 @@ watch(
         <div class="line-monitor-center">
           <LineMonitorMap
             :line="currentLineView.line"
-            :status="currentLineView.status"
+            :line-state="currentLineView"
             :selected-device-id="selectedDeviceId"
             :is-live="isLive"
             @select-device="selectedDeviceId = $event"

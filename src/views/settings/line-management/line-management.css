@@ -626,19 +626,15 @@
 .line-route-device-marker {
   position: relative;
   display: flex;
-  min-width: 48px;
   align-items: center;
   color: #e8f8ff;
   cursor: pointer;
   background: transparent;
   border: 0;
-  transform: translateY(15px);
+  padding: 0;
 }
 
 .line-route-device-marker > i {
-  position: absolute;
-  top: -17px;
-  left: 50%;
   display: grid;
   width: 27px;
   height: 27px;
@@ -653,30 +649,6 @@
   box-shadow:
     0 0 0 4px rgba(0, 216, 255, 0.08),
     0 0 12px rgba(0, 216, 255, 0.78);
-  transform: translate(-50%, -50%);
-}
-
-.line-route-device-marker > span {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 2px 5px;
-  background: rgba(6, 25, 43, 0.9);
-}
-
-.line-route-device-marker strong,
-.line-route-device-marker small {
-  white-space: nowrap;
-}
-
-.line-route-device-marker strong {
-  font-family: Consolas, monospace;
-  font-size: 12px;
-}
-
-.line-route-device-marker small {
-  color: #7794a8;
-  font-size: 12px;
 }
 
 .line-route-device-marker.is-warning > i {

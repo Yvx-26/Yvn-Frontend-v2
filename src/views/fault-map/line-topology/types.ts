@@ -1,4 +1,4 @@
-import type { CableLineStatus, DeviceMapStatus } from '../../../domain/map/types'
+import type { CableLineState, DeviceMapStatus } from '../../../domain/map/types'
 
 export type TopologyFocusMode = string
 
@@ -21,13 +21,10 @@ export interface TopologyFaultSegment {
   title: string
 }
 
-export interface TopologyLine {
+export interface TopologyLine extends CableLineState {
   id: string
   name: string
   length: string
-  color: string
-  status: CableLineStatus
-  statusLabel: string
   devices: TopologyDevice[]
   faultSegment?: TopologyFaultSegment
 }

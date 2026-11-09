@@ -555,28 +555,29 @@
   z-index: 8;
   right: 295px;
   bottom: 18px;
-  color: rgba(125, 155, 176, 0.72);
+  max-width: min(360px, calc(100% - 32px));
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #c7dae8;
+  background: rgba(7, 24, 43, 0.92);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .map-layer-device-marker {
   position: relative;
-  display: flex;
-  min-width: 44px;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  place-items: center;
   padding: 0;
   color: #e7fbff;
   cursor: pointer;
   background: transparent;
   border: 0;
-  transform: translateY(14px);
 }
 
 .map-layer-device-marker i {
-  position: absolute;
-  top: -18px;
-  left: 50%;
+  display: grid;
+  place-items: center;
   width: 24px;
   height: 24px;
   background: #08243d;
@@ -585,29 +586,7 @@
   box-shadow:
     0 0 0 4px rgba(0, 216, 255, 0.08),
     0 0 12px rgba(0, 216, 255, 0.78);
-  transform: translate(-50%, -50%);
-}
-
-.map-layer-device-marker i::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  content: '';
-  background: #24d9f5;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.map-layer-device-marker span {
-  padding: 2px 5px;
-  color: #e9fbff;
-  font-family: Consolas, monospace;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  background: rgba(6, 25, 43, 0.9);
+  font: 700 10px Consolas, monospace;
 }
 
 .map-layer-device-marker.is-warning i {
@@ -617,17 +596,9 @@
     0 0 14px rgba(245, 166, 35, 0.82);
 }
 
-.map-layer-device-marker.is-warning i::after {
-  background: #f5a623;
-}
-
 .map-layer-device-marker.is-offline i {
   border-color: #778a99;
   box-shadow: none;
-}
-
-.map-layer-device-marker.is-offline i::after {
-  background: #778a99;
 }
 
 .map-layer-fault-marker {

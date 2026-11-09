@@ -21,7 +21,7 @@ defineProps<{
       <article v-for="device in devices" :key="device.id" class="overview-device-item">
         <i :class="`is-${device.status}`" aria-hidden="true"></i>
         <div>
-          <strong>{{ device.name }}</strong>
+          <strong class="asset-truncate" :title="device.name">{{ device.name }}</strong>
           <span>{{ device.area }}</span>
         </div>
         <small :class="`is-${device.status}`">{{ device.latency }}</small>

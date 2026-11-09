@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useInfrastructureStore } from '../../stores/infrastructure'
+import CableLineLegend from '../../components/common/CableLineLegend.vue'
 import CableMap from './fault-distribution/components/CableMap.vue'
 import FaultMapDetail from './fault-distribution/components/FaultMapDetail.vue'
 import LineFilterPanel from './fault-distribution/components/LineFilterPanel.vue'
@@ -11,7 +12,7 @@ import './fault-distribution/fault-distribution.css'
 
 const router = useRouter()
 const infrastructureStore = useInfrastructureStore()
-const lines = computed(() => toCableLines(infrastructureStore.lines))
+const lines = computed(() => toCableLines(infrastructureStore.lines, infrastructureStore.devices))
 const selectedLineId = ref(lines.value[0]?.id ?? '')
 const selection = ref<MapSelection>(null)
 
@@ -76,14 +77,16 @@ function enterRealtimeLocation() {
     </Transition>
 
     <footer class="fault-distribution-legend">
-      <div>
+      <CableLineLegend />
+      <div aria-label="设备与故障点图例">
         <span><i class="is-online"></i>设备在线</span>
         <span><i class="is-warning"></i>设备预警</span>
         <span><i class="is-offline"></i>设备离线</span>
         <span><i class="is-fault"></i>故障定位点</span>
       </div>
       <span v-if="selectedLine"
-        >{{ selectedLine.name }} · {{ selectedLine.devices.length }} 个定位设备</span
+        :title="selectedLine.statusDetail"
+        >{{ selectedLine.name }} · {{ selectedLine.statusDetail }}</span
       >
     </footer>
   </section>

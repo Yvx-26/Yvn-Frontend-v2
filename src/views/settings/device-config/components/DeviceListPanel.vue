@@ -107,8 +107,8 @@ function lineName(lineId: string) {
       >
         <i class="device-config-state-dot" :class="`is-${device.state}`"></i>
         <span class="device-config-list-copy">
-          <strong>{{ device.id }} · {{ device.position }}</strong>
-          <span>{{ lineName(device.lineId) }}</span>
+          <strong class="asset-identifier asset-truncate" :title="device.id">{{ device.id }}</strong>
+          <span class="asset-truncate" :title="`${lineName(device.lineId)} · ${device.position}`">{{ lineName(device.lineId) }} · {{ device.position }}</span>
           <small>{{ categoryLabels[device.category] }}</small>
         </span>
         <span class="device-config-list-state" :class="`is-${device.state}`">

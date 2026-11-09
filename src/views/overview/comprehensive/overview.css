@@ -339,31 +339,6 @@
   font-style: normal;
 }
 
-.overview-map-marker > span {
-  position: absolute;
-  top: 33px;
-  left: 50%;
-  max-width: 110px;
-  overflow: hidden;
-  padding: 2px 5px;
-  color: #d4e5ef;
-  background: rgba(5, 22, 38, 0.86);
-  border-radius: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  pointer-events: none;
-  text-overflow: ellipsis;
-  transform: translateX(-50%);
-  opacity: 0;
-  transition: opacity 150ms ease;
-  white-space: nowrap;
-}
-
-.overview-map-marker:hover > span,
-.overview-map-marker.is-selected > span {
-  opacity: 1;
-}
-
 .overview-line-map-state {
   position: absolute;
   inset: 0;

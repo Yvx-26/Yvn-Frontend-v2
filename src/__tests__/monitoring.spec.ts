@@ -7,6 +7,8 @@ import {
   fetchLatestWaveform,
   fetchDashboardDevices,
   fetchDashboardMap,
+  fetchHistoryWaveform,
+  fetchWaveHistory,
 } from '../services/telemetry-api'
 import WaveMonitor from '../views/monitoring/WaveMonitor.vue'
 import DeviceMonitor from '../views/monitoring/DeviceMonitor.vue'
@@ -19,6 +21,8 @@ vi.mock('../services/telemetry-api', () => ({
   fetchLatestWaveform: vi.fn<typeof fetchLatestWaveform>(),
   fetchDashboardDevices: vi.fn<typeof fetchDashboardDevices>(),
   fetchDashboardMap: vi.fn<typeof fetchDashboardMap>(),
+  fetchHistoryWaveform: vi.fn<typeof fetchHistoryWaveform>(),
+  fetchWaveHistory: vi.fn<typeof fetchWaveHistory>(),
 }))
 enableAutoUnmount(afterEach)
 afterEach(() => {
@@ -29,6 +33,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(fetchDashboardDevices).mockResolvedValue([])
   vi.mocked(fetchDashboardMap).mockResolvedValue([])
+  vi.mocked(fetchWaveHistory).mockResolvedValue({ data: [], next_before_id: null })
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -86,6 +91,73 @@ async function setupPage(
 }
 
 describe('empty infrastructure and monitored frames', () => {
+  it('keeps the history list open and highlights the loaded frame', async () => {
+    const historical = {
+      frame_id: 18,
+      imei: 'M1',
+      phase_pair: 'A-B',
+      frame_valid: true,
+      fault_type: 'NORMAL',
+      samples: [],
+      waveform_samples: Array(4000).fill(20) as number[],
+      points: 4096,
+      waveform_points: 4000,
+    }
+    vi.mocked(fetchLatestWaveform).mockResolvedValue({ ...historical, frame_id: 19 })
+    vi.mocked(fetchWaveHistory).mockResolvedValue({
+      data: [
+        {
+          ID: 18,
+          IMEI: 'M1',
+          CABLE: 'A-B',
+          PAYLOAD_LEN: 8192,
+          CREATED_AT: null,
+          frame_valid: true,
+          frame_error: null,
+          fault_type: 'NORMAL',
+          fault_distance_m: null,
+        },
+      ],
+      next_before_id: null,
+    })
+    vi.mocked(fetchHistoryWaveform).mockResolvedValue(historical)
+    const { wrapper } = await setupPage(WaveMonitor, true)
+    const phaseCard = wrapper.findAll('.wave-monitor-frame-stats button')[0]!
+    await phaseCard.trigger('click')
+    await flushPromises()
+    await wrapper.get('.wave-history-list button').trigger('click')
+    await flushPromises()
+    expect(fetchHistoryWaveform).toHaveBeenCalledWith('M1', 18, expect.any(AbortSignal))
+    expect(wrapper.text()).toContain('返回实时')
+    expect(wrapper.get('.wave-history-list button.is-current').text()).toContain('#FRAME-18')
+    expect(wrapper.get('.wave-monitor-zoom-range').text()).toContain('采样点 0–3999')
+    await phaseCard.trigger('click')
+    expect(wrapper.find('.wave-history-list').exists()).toBe(false)
+    await phaseCard.trigger('click')
+    expect(wrapper.get('.wave-history-list button.is-current').text()).toContain('#FRAME-18')
+    await wrapper.get('[aria-label="放大纵轴"]').trigger('click')
+    expect(wrapper.get('[aria-label="纵轴缩放"]').text()).toContain('纵轴 1.25×')
+    expect(wrapper.get('.wave-monitor-zoom-range').text()).toContain('采样点 0–3999')
+
+    await wrapper.get('[aria-label="放大横轴"]').trigger('click')
+    const zoomedRange = wrapper.get('.wave-monitor-zoom-range').text()
+    let resolveNextPhase!: (frame: typeof historical) => void
+    vi.mocked(fetchLatestWaveform).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNextPhase = resolve
+      }),
+    )
+    await wrapper.findAll('.wave-monitor-frame-stats button')[1]!.trigger('click')
+    expect(wrapper.get('.wave-monitor-empty-chart').text()).toContain('正在读取当前相间波形')
+    expect(wrapper.get('[aria-label="横轴缩放"]').text()).toContain('横轴 1.25×')
+
+    resolveNextPhase({ ...historical, frame_id: 20, phase_pair: 'A-C' })
+    await flushPromises()
+    expect(wrapper.find('.wave-monitor-empty-chart').exists()).toBe(false)
+    expect(wrapper.get('.wave-monitor-zoom-range').text()).toBe(zoomedRange)
+    expect(wrapper.get('[aria-label="纵轴缩放"]').text()).toContain('纵轴 1.25×')
+  })
+
   it('accepts recent GPS activity for an integrated device connection check', async () => {
     const { wrapper } = await setupPage(DeviceConfig, true)
     await wrapper.findAll('select')[0]!.setValue('integrated')

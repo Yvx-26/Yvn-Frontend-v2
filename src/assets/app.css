@@ -837,3 +837,77 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+.cable-annotated-map {
+  isolation: isolate;
+}
+
+.cable-map-label-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cable-map-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: max-content;
+  max-width: 240px;
+  overflow: hidden;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #0b2133;
+  color: #eef7ff;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.cable-line-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  font-size: 12px;
+}
+
+.cable-line-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.cable-line-legend b {
+  width: 17px;
+  border-top: 3px solid;
+}
+
+.cable-line-legend b.is-dashed {
+  border-top-style: dashed;
+}
+
+.asset-identifier {
+  min-width: 0;
+  font-family: Consolas, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.asset-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.asset-truncate {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

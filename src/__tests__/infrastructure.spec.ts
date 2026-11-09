@@ -108,4 +108,55 @@ describe('infrastructure lifecycle and API payloads', () => {
     expect(store.devices[0]!.state).toBe('online')
     expect(store.devices[0]!.coordinate).toEqual([113.6, 34.9])
   })
+
+  it('uses the saved timeout per device, including on either side of 90 seconds', () => {
+    const store = useInfrastructureStore()
+    const long = device('long')
+    const short = device('short')
+    long.network.offlineThresholdSeconds = '300'
+    short.network.offlineThresholdSeconds = '30'
+    store.devices = [long, short, device('default')]
+    store.applyRuntimeStatus(
+      [
+        { imei: 'long', age_seconds: 300, online: false },
+        { imei: 'short', age_seconds: 31, online: true },
+        { imei: 'default', age_seconds: 90, online: true },
+      ].map((item) => ({
+        ...item,
+        cable_key: 'L1',
+        cable_name: 'L1',
+        last_wave_time: '2026-10-24 12:00:00',
+      })),
+    )
+    expect(store.devices.map((item) => item.state)).toEqual(['online', 'offline', 'online'])
+  })
+
+  it('does not reset the age of cached GPS data when reloading inventory', async () => {
+    const store = useInfrastructureStore()
+    const locator = device('GPS', 'locator')
+    locator.network.offlineThresholdSeconds = '30'
+    store.devices = [locator]
+    store.applyLocationStatus([
+      {
+        imei: 'GPS',
+        lng: 113.6,
+        lat: 34.9,
+        ts: null,
+        updated_at: '2026-10-24 12:00:00',
+        cable_key: 'L1',
+        cable_name: 'L1',
+        online: true,
+        age_seconds: 30,
+      },
+    ])
+    expect(store.devices[0]!.state).toBe('online')
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1000)
+    try {
+      vi.mocked(fetchInfrastructure).mockResolvedValue({ devices: [locator], lines: [] })
+      await store.initialize()
+      expect(store.devices[0]!.state).toBe('offline')
+    } finally {
+      clock.mockRestore()
+    }
+  })
 })

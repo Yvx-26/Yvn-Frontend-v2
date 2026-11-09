@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TopologyLine } from '../types'
+import { cableLineStyles } from '../../../../domain/map/lines'
 
 defineProps<{
   lines: TopologyLine[]
@@ -36,12 +37,12 @@ const emit = defineEmits<{
         :class="{ 'is-active': selectedLineId === line.id }"
         @click="emit('select', line)"
       >
-        <i :class="`is-${line.status}`" aria-hidden="true"></i>
+        <i :style="{ background: cableLineStyles[line.status].color, boxShadow: `0 0 7px ${cableLineStyles[line.status].color}` }" aria-hidden="true"></i>
         <span>
-          <strong>{{ line.name }}</strong>
-          <small>{{ line.devices.length }} 个设备 · {{ line.length }}</small>
+          <strong class="asset-truncate" :title="line.name">{{ line.name }}</strong>
+          <small :title="line.statusDetail">{{ line.statusDetail }}</small>
         </span>
-        <em :class="`is-${line.status}`">{{ line.statusLabel }}</em>
+        <em :title="line.statusDetail" :style="{ color: cableLineStyles[line.status].color }">{{ line.statusLabel }}</em>
       </button>
     </div>
   </section>

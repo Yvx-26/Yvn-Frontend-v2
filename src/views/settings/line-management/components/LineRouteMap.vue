@@ -2,7 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { BoundLineDevice } from '../../../../domain/infrastructure/types'
 import { loadAmap } from '../../../../integrations/amap/loader'
-import { markerContent } from '../../../../integrations/amap/markers'
+import { nodeMarkerContent } from '../../../../integrations/amap/markers'
+import { cableStroke } from '../../../../integrations/amap/cable-lines'
 import type {
   AMapMapInstance,
   AMapNamespace,
@@ -38,14 +39,9 @@ const deviceSignature = computed(() =>
 )
 
 function createDeviceContent(device: BoundLineDevice) {
-  const marker = markerContent(
+  const marker = nodeMarkerContent(
     `line-route-device-marker is-${device.state}`,
-    device.id,
-    device.position,
-  )
-  marker.querySelector('i')!.textContent = String(device.sequence).padStart(2, '0')
-  marker.setAttribute(
-    'aria-label',
+    device.sequence,
     `第${device.sequence}个定位设备，${device.id}，${device.position}`,
   )
   markerElements.set(device.id, marker)
@@ -97,25 +93,28 @@ async function initializeMap() {
       overlays.push(
         new AMapApi.Polyline({
           path: orderedDevices.map((device) => device.coordinate),
-          strokeColor: '#20d9f5',
+          ...cableStroke('draft'),
           strokeOpacity: 0.95,
           strokeWeight: 7,
           lineJoin: 'round',
           lineCap: 'round',
-          showDir: true,
           zIndex: 42,
         }),
       )
     }
 
     orderedDevices.forEach((device) => {
+      const content = createDeviceContent(device)
+      content.addEventListener('click', (event) => {
+        event.stopPropagation()
+        emit('select-device', device.id)
+      })
       const marker = new AMapApi!.Marker({
         position: device.coordinate,
-        content: createDeviceContent(device),
+        content,
         anchor: 'center',
         zIndex: 62,
       })
-      marker.on('click', () => emit('select-device', device.id))
       overlays.push(marker)
     })
 
@@ -171,8 +170,9 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="line-route-map-coordinate">
+      路径预览 ·
       <template v-if="selectedDevice">
-        {{ selectedDevice.id }} · {{ selectedDevice.coordinate[0].toFixed(4) }},
+        <span class="asset-identifier">{{ selectedDevice.id }}</span> · {{ selectedDevice.coordinate[0].toFixed(4) }},
         {{ selectedDevice.coordinate[1].toFixed(4) }}
       </template>
       <template v-else>请选择定位设备</template>

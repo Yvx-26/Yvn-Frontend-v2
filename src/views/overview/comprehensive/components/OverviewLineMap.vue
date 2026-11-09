@@ -2,6 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { BoundLineDevice, ManagedLine } from '../../../../domain/infrastructure/types'
 import { loadAmap } from '../../../../integrations/amap/loader'
+import { cableStroke, createCableLabelLayer } from '../../../../integrations/amap/cable-lines'
+import { nodeMarkerContent } from '../../../../integrations/amap/markers'
+import type { CableLineState } from '../../../../domain/map/types'
 import type {
   AMapMapInstance,
   AMapNamespace,
@@ -10,6 +13,7 @@ import type {
 
 const props = defineProps<{
   line: ManagedLine
+  lineState: CableLineState
   selectedDeviceId: string
 }>()
 
@@ -23,6 +27,9 @@ const loadError = ref('')
 const markerElements = new Map<string, HTMLElement>()
 const overlays: AMapOverlay[] = []
 type PathOverlay = AMapOverlay & { setPath(path: [number, number][]): void }
+let routeLine: PathOverlay | undefined
+let routeGlow: AMapOverlay | undefined
+let lineLabels: ReturnType<typeof createCableLabelLayer> | undefined
 let lineRevealFrame = 0
 let linePulseFrame = 0
 let lastLinePulseAt = 0
@@ -43,9 +50,9 @@ const locatedDevices = computed(() =>
 )
 
 const mapSignature = computed(() =>
-  locatedDevices.value
+  `${props.line.id}:${locatedDevices.value
     .map((device) => `${device.id}:${device.sequence}:${device.coordinate.join(',')}`)
-    .join('|'),
+    .join('|')}`,
 )
 
 const routeViewport = computed(() => {
@@ -67,20 +74,16 @@ const routeViewport = computed(() => {
 })
 
 function createDeviceContent(device: BoundLineDevice) {
-  const marker = document.createElement('button')
-  marker.type = 'button'
-  marker.className = `overview-map-marker is-${device.state}`
+  const marker = nodeMarkerContent(
+    `overview-map-marker is-${device.state}`,
+    device.sequence,
+    `${device.id}，${device.position || device.name}`,
+  )
   marker.style.setProperty('--node-delay', `${device.sequence * -0.16}s`)
   marker.setAttribute(
     'aria-label',
-    `${device.name}，${device.state === 'online' ? '在线' : device.state === 'warning' ? '数据异常' : '离线'}`,
+    `${marker.title}，${device.state === 'online' ? '在线' : device.state === 'warning' ? '数据异常' : '离线'}`,
   )
-
-  const point = document.createElement('i')
-  point.textContent = String(device.sequence).padStart(2, '0')
-  const label = document.createElement('span')
-  label.textContent = device.position || device.name
-  marker.append(point, label)
   marker.addEventListener('click', (event) => {
     event.stopPropagation()
     emit('select-device', device.id)
@@ -136,6 +139,8 @@ function pulseLine(glowLine: AMapOverlay) {
 }
 
 function clearMap() {
+  lineLabels?.destroy()
+  lineLabels = undefined
   if (lineRevealFrame) cancelAnimationFrame(lineRevealFrame)
   if (linePulseFrame) cancelAnimationFrame(linePulseFrame)
   lineRevealFrame = 0
@@ -145,6 +150,19 @@ function clearMap() {
   map = undefined
   markerElements.clear()
   overlays.splice(0)
+  routeLine = undefined
+  routeGlow = undefined
+}
+
+function syncLineState() {
+  const stroke = cableStroke(props.lineState.status, true)
+  routeLine?.setOptions(stroke)
+  routeGlow?.setOptions({ strokeColor: stroke.strokeColor, strokeStyle: stroke.strokeStyle })
+  lineLabels?.setRoutes([{
+    path: locatedDevices.value.map((device) => device.coordinate),
+    name: props.line.name,
+    statusLabel: props.lineState.statusLabel,
+  }])
 }
 
 function syncSelectedDevice() {
@@ -161,10 +179,9 @@ function syncMarkers() {
     element.classList.add(`is-${device.state}`)
     element.setAttribute(
       'aria-label',
-      `${device.name}，${device.state === 'online' ? '在线' : device.state === 'warning' ? '数据异常' : '离线'}`,
+      `${device.id}，${device.position || device.name}，${device.state === 'online' ? '在线' : device.state === 'warning' ? '数据异常' : '离线'}`,
     )
-    const label = element.querySelector('span')
-    if (label) label.textContent = device.position || device.name
+    element.title = element.getAttribute('aria-label') ?? ''
   })
 }
 
@@ -191,42 +208,33 @@ async function initializeMap() {
       showLabel: true,
       viewMode: '2D',
     })
+    lineLabels = createCableLabelLayer(map, mapContainer.value)
 
     if (locatedDevices.value.length >= 2) {
       const path = locatedDevices.value.map((device) => device.coordinate) as [number, number][]
       const line = new AMapApi.Polyline({
         path: [path[0], path[0]],
-        strokeColor: '#f5a623',
+        ...cableStroke(props.lineState.status, true),
         strokeOpacity: 0.96,
-        strokeWeight: 5,
         lineJoin: 'round',
         lineCap: 'round',
-        showDir: true,
-        zIndex: 42,
       }) as PathOverlay
       const glowLine = new AMapApi.Polyline({
         path,
-        strokeColor: '#f5a623',
+        ...cableStroke(props.lineState.status),
         strokeOpacity: 0.12,
         strokeWeight: 8,
         lineJoin: 'round',
         lineCap: 'round',
         zIndex: 40,
+        showDir: false,
+        clickable: false,
       })
-      overlays.push(
-        new AMapApi.Polyline({
-          path,
-          strokeColor: '#0b3151',
-          strokeOpacity: 0.92,
-          strokeWeight: 11,
-          lineJoin: 'round',
-          lineCap: 'round',
-          zIndex: 38,
-        }),
-        glowLine,
-        line,
-      )
+      routeLine = line
+      routeGlow = glowLine
+      overlays.push(glowLine, line)
       queueMicrotask(() => {
+        if (currentInitializationId !== initializationId) return
         revealLine(line, path)
         pulseLine(glowLine)
       })
@@ -247,6 +255,7 @@ async function initializeMap() {
     }
     isLoading.value = false
     syncSelectedDevice()
+    syncLineState()
   } catch (error) {
     isLoading.value = false
     loadError.value = error instanceof Error ? error.message : '高德地图初始化失败'
@@ -260,6 +269,7 @@ function focusLine() {
 watch(mapSignature, initializeMap)
 watch(() => props.selectedDeviceId, syncSelectedDevice)
 watch(() => props.line.devices, syncMarkers, { deep: true })
+watch(() => [props.lineState.status, props.line.name], syncLineState)
 onMounted(initializeMap)
 onBeforeUnmount(() => {
   initializationId += 1

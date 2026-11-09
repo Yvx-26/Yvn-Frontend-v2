@@ -1,11 +1,8 @@
 import type { ManagedLine } from '../../../domain/infrastructure/types'
+import type { CableLineState } from '../../../domain/map/types'
 
-export type LineRuntimeStatus = 'normal' | 'warning' | 'draft'
-
-export interface LineMonitorLineView {
+export interface LineMonitorLineView extends CableLineState {
   line: ManagedLine
-  status: LineRuntimeStatus
-  statusText: string
   onlineCount: number
 }
 
